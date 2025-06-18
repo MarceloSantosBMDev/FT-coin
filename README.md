@@ -30,3 +30,7 @@ g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Carteira.cpp Movi
   - Saldo das carteiras
   - Histórico de movimentações
   - Ganhos e perdas
+
+## Licensa
+
+Programa criado e produzido pelo grupo A-10, composto por Gustavo Soares Almeida, Hans William Hamann, Marcelo Dos Santos Da Boa Morte, Nicolas Lourenço Mafei e Renan Felipe Rodrigues
