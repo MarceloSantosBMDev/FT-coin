@@ -1,22 +1,35 @@
 #include <iostream>
-#include "menu.hpp"
-#include "ajuda.hpp"
-#include "connectDB.h" // Inclua o cabeçalho do banco de dados
+#include <limits>
+#include "Controller.h"
+#include "cores.h"
 
 using namespace std;
 
 int main() {
-    // Instancia e testa a conexão com o banco de dados
     try {
-        ServerDBConnection dbConnection;
-        // Se chegou aqui, a conexão foi bem-sucedida
-        cout << "Conexão com o banco de dados estabelecida com sucesso!" << endl;
-    } catch (...) {
-        cout << "Falha ao conectar ao banco de dados." << endl;
-        return 1; // Retorna código de erro
-    }
+        cout << VERDE << "\n=== FT-Coin - Sistema de Controle de Carteiras ===\n" << RESET;
+        cout << "\nSelecione o tipo de execução:\n";
+        cout << "1. Memória\n";
+        cout << "2. Banco de Dados\n\n";
+        cout << "Opção: ";
 
-    Menu menu;
-    menu.mostrarMenu();
+        int opcao;
+        while (!(cin >> opcao) || (opcao != 1 && opcao != 2)) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << VERMELHO << "Opção inválida! Digite 1 ou 2: " << RESET;
+        }
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        DataBaseSelector dbType = (opcao == 1) ? DataBaseSelector::MEMORY : DataBaseSelector::DATABASE;
+        Controller controller(dbType);
+        controller.start();
+    } catch (const exception& e) {
+        cerr << VERMELHO << "\nErro: " << e.what() << RESET << endl;
+        return 1;
+    } catch (...) {
+        cerr << VERMELHO << "\nErro desconhecido!" << RESET << endl;
+        return 1;
+    }
     return 0;
 }

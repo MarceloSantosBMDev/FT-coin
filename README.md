@@ -1,9 +1,32 @@
-# FT-coin
-FT coin referente a atividade da disciplina Programação Orientada a Objetos I da UNICAMP no campus faculdade de tecnologia.
+# FT-Coin - Sistema de Controle de Carteiras
 
-Essa atividade é desenvolvida em grupo e o objetivo é criar um sistema que desenvolva bem as habilidades de programação com classes, ponteiros e dados persistentes em C++
+Este é um sistema de controle de carteiras de criptomoedas desenvolvido em C++.
 
-A atividade está sendo desenvolvida pela equipe A-10 que conta com 4 membros, Marcelo dos Santos, Renan Rodrigues, Nicolas Mafei e Gustavo Almeida
+## Requisitos
 
-A tarefa tem data de envio para Junho e será a ultima atividade da disciplina ministrada pelo doutor Angelis
+- CMake 3.10 ou superior
+- Compilador C++ com suporte a C++17
+- SQLite3
 
+## Execução
+
+g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Carteira.cpp Movimentacao.cpp ConnectDB.cpp CarteiraMemDAO.cpp MovimentacaoMemDAO.cpp CarteiraBDDAO.cpp MovimentacaoBDDAO.cpp -I/usr/include/mariadb -lmariadbcpp -lmariadb -lpthread -ldl
+
+## Funcionalidades
+
+- Gerenciamento de carteiras
+  - Criar nova carteira
+  - Editar carteira existente
+  - Excluir carteira
+  - Listar carteiras
+
+- Movimentações
+  - Registrar compras
+  - Registrar vendas
+
+- Relatórios
+  - Carteiras por ID
+  - Carteiras por nome
+  - Saldo das carteiras
+  - Histórico de movimentações
+  - Ganhos e perdas
