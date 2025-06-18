@@ -6,7 +6,7 @@ Este é um sistema de controle de carteiras de criptomoedas desenvolvido em C++.
 
 - CMake 3.10 ou superior
 - Compilador C++ com suporte a C++17
-- SQLite3
+- MariaDB Connector
 
 ## Execução
 
