@@ -1,4 +1,6 @@
 #include "Menu.h"
+#include "cores.h"
+#include <iomanip>
 
 using namespace std;
 
@@ -18,11 +20,15 @@ void Menu::addOption(const string& option) {
 
 int Menu::getOption() const {
     while (true) {
-        cout << "\n" << AZUL << title << RESET << "\n";
+        cout << "\n" << CIANO NEGRITO;
+        cout << "╔════════════════════════════════════════════════════════════╗\n";
+        cout << "║ " << left << setw(58) << title << " ║\n";
+        cout << "╚════════════════════════════════════════════════════════════╝\n" << RESET;
+        
         for (size_t i = 0; i < options.size(); i++) {
-            cout << (i + 1) << ". " << options[i] << "\n";
+            cout << "   " << VERDE NEGRITO << (i + 1) << ". " << RESET << options[i] << "\n";
         }
-        cout << "\nOpção: ";
+        cout << AMARELO << "\n   Opção: " << RESET;
 
         int opcao;
         while (!(cin >> opcao) || opcao < 1 || opcao > static_cast<int>(options.size())) {

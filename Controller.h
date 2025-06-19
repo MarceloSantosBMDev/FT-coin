@@ -9,6 +9,10 @@
 #include <memory>
 #include "ConnectDB.h"
 #include <map>
+#include <thread>
+#include <chrono>
+#include <unistd.h>
+#include <termios.h>
 
 using namespace std;
 
@@ -47,14 +51,24 @@ private:
 	// Relatorios
 	void reportSaldo();
 	void reportHistorico();
+	void reportHistoricoPorCarteira();
 	void reportGanhoPerda();
+	void reportCarteira();
 
 	// Outros
 	void showHelp();
+	void esperar(int seconds);
 	double getCotacao(const string& data);
 	double getCarteiraQuantidadeMoedas(int carteiraId);
 	double getCarteiraFluxoCaixa(int carteiraId);
 	void createCotacao(const string& data, double cotacao);
+	void printMovimentacoes(const vector<unique_ptr<Movimentacao>>& movimentacoes);
+	void printSlowly(const string& text, int delay_ms = 30);
+
+	// Input validation
+	template<typename T>
+	T getValidatedInput(const string& prompt);
+	string getValidatedDate(const string& prompt);
 };
 
 #endif // CONTROLLER_H
