@@ -6,7 +6,7 @@ Este é um sistema de controle de carteiras de criptomoedas desenvolvido em C++.
 
 - CMake 3.10 ou superior
 - Compilador C++ com suporte a C++17
-- SQLite3
+- MariaDB Connector
 
 ## Execução
 
@@ -30,3 +30,7 @@ g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Carteira.cpp Movi
   - Saldo das carteiras
   - Histórico de movimentações
   - Ganhos e perdas
+
+## Licença
+
+Programa criado e produzido pelo grupo A-10, composto por Gustavo Soares Almeida, Hans William Hamann, Marcelo Dos Santos Da Boa Morte, Nicolas Lourenço Mafei e Renan Felipe Rodrigues
