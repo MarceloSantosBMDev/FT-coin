@@ -16,6 +16,12 @@
 
 using namespace std;
 
+struct CarteiraFluxoCaixaDetalhado {
+	double totalCompras;
+	double totalVendas;
+	double fluxoLiquido;
+};
+
 class Controller {
 public:
 	Controller(DataBaseSelector type);
@@ -33,6 +39,7 @@ private:
 	void actionCarteira();
 	void actionMovimentacao();
 	void actionRelatorios();
+	void actionRelatorioOraculo();
 	void actionAjuda();
 	void launchActions(string title, vector<string> menuItens, vector<void (Controller::*)()> functions);
 
@@ -54,13 +61,21 @@ private:
 	void reportHistoricoPorCarteira();
 	void reportGanhoPerda();
 	void reportCarteira();
+	void actionRelatorioCarteiraEspecifica();
+	void reportCarteiraGanhosPerdas();
+	void reportCarteiraMovimentacoesEMoedas();
+	void listarHistoricoCotacao();
+	void relatorioGeralCotacao();
+	void listarCotacaoPorData();
 
 	// Outros
-	void showHelp();
+	void showSystemHelp();
+	void showCredits();
 	void esperar(int seconds);
+	void esperarInterativo(int seconds);
 	double getCotacao(const string& data);
 	double getCarteiraQuantidadeMoedas(int carteiraId);
-	double getCarteiraFluxoCaixa(int carteiraId);
+	CarteiraFluxoCaixaDetalhado getCarteiraFluxoCaixaDetalhado(int carteiraId);
 	void createCotacao(const string& data, double cotacao);
 	void printMovimentacoes(const vector<unique_ptr<Movimentacao>>& movimentacoes);
 	void printSlowly(const string& text, int delay_ms = 30);
@@ -69,6 +84,7 @@ private:
 	template<typename T>
 	T getValidatedInput(const string& prompt);
 	string getValidatedDate(const string& prompt);
+	bool isValidDate(int d, int m, int y);
 };
 
 #endif // CONTROLLER_H

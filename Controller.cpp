@@ -60,7 +60,7 @@ void Controller::start()
 
     cout << VERDE NEGRITO;
     for(const auto& line : welcome_art) {
-        printSlowly(line, 5);
+        printSlowly(line, 10);
     }
     cout << RESET;
     printSlowly(CIANO "\nSistema de Apuracao de Ganhos e Perdas em Carteira de Moedas" RESET, 15);
@@ -109,15 +109,30 @@ void Controller::actionMovimentacao()
 void Controller::actionRelatorios()
 {
     vector<string> menuItens = {
-        "Saldo das Carteiras", "Historico de Movimentacoes", "Ganhos e Perdas (Global)", "Relatorio de Carteira Especifica", "Voltar"};
+        "Relatorio Global de Carteiras",
+        "Relatorio de Carteira Especifica",
+        "Relatorio de Cotacao do Oraculo",
+        "Historico Geral de Movimentacoes",
+        "Historico Geral de Ganhos e Perdas",
+        "Voltar"};
     vector<void (Controller::*)()> functions = {
-        &Controller::reportSaldo, &Controller::reportHistorico, &Controller::reportGanhoPerda, &Controller::reportCarteira};
+        &Controller::reportSaldo,
+        &Controller::actionRelatorioCarteiraEspecifica,
+        &Controller::actionRelatorioOraculo,
+        &Controller::reportHistorico,
+        &Controller::reportGanhoPerda
+        };
     launchActions("Relatorios", menuItens, functions);
 }
 
 void Controller::actionAjuda()
 {
-    showHelp();
+    vector<string> menuItens = {"Ajuda do Sistema", "Creditos", "Voltar"};
+    vector<void (Controller::*)()> functions = {
+        &Controller::showSystemHelp,
+        &Controller::showCredits
+        };
+    launchActions("Ajuda", menuItens, functions);
 }
 
 void Controller::launchActions(string title, vector<string> menuItens, vector<void (Controller::*)()> functions)
@@ -203,7 +218,7 @@ void Controller::editCarteira()
             _carteiraDAO->update(*carteira);
             cout << VERDE << "\nCarteira atualizada com sucesso!\n" << RESET;
             menu.setTitle("Editando Carteira: " + carteira->getTitular());
-            esperar(2);
+            esperarInterativo(2);
         }
     }
 }
@@ -211,6 +226,11 @@ void Controller::editCarteira()
 void Controller::deleteCarteira()
 {
     int id = getValidatedInput<int>("\nID da carteira: ");
+
+    if (!_carteiraDAO->findById(id)) {
+        cout << VERMELHO << "\nCarteira com ID " << id << " nao encontrada!\n" << RESET;
+        return;
+    }
 
     try {
         _movimentacaoDAO->removeByCarteiraId(id);
@@ -224,12 +244,16 @@ void Controller::deleteCarteira()
 void Controller::listCarteira()
 {
     listAll();
-    esperar(5);
+    esperarInterativo(5);
 }
 
 void Controller::newCompra()
 {
     int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira para a compra: ");
+    if (!_carteiraDAO->findById(carteiraId)) {
+        cout << VERMELHO << "\nCarteira com ID " << carteiraId << " nao encontrada!\n" << RESET;
+        return;
+    }
     double quantidade = getValidatedInput<double>("Digite a quantidade comprada: ");
     string data = getValidatedDate("Digite a data da compra (DD-MM-AAAA): ");
 
@@ -244,6 +268,10 @@ void Controller::newCompra()
 void Controller::newVenda()
 {
     int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira para a venda: ");
+    if (!_carteiraDAO->findById(carteiraId)) {
+        cout << VERMELHO << "\nCarteira com ID " << carteiraId << " nao encontrada!\n" << RESET;
+        return;
+    }
     double quantidade = getValidatedInput<double>("Digite a quantidade vendida: ");
     string data = getValidatedDate("Digite a data da venda (DD-MM-AAAA): ");
 
@@ -258,8 +286,8 @@ void Controller::newVenda()
 void Controller::reportSaldo()
 {
     Menu menu;
-    menu.setTitle("Relatório das Carteiras");
-    menu.addOption("Ordenar por Saldo (Fluxo de Caixa)");
+    menu.setTitle("Relatorio Global de Carteiras");
+    menu.addOption("Ordenar por Saldo Total");
     menu.addOption("Ordenar por Quantidade de Moedas");
     menu.addOption("Ordenar por Nome do Titular");
     menu.addOption("Ordenar por ID");
@@ -279,23 +307,39 @@ void Controller::reportSaldo()
             int id;
             string titular;
             double quantidadeMoedas;
-            double fluxoCaixa;
+            double saldoTotal;
         };
 
         vector<CarteiraReportInfo> reportData;
         for (const auto& carteira : carteiras) {
+            double quantidadeMoedas = getCarteiraQuantidadeMoedas(carteira->getId());
+            auto fluxoDetalhado = getCarteiraFluxoCaixaDetalhado(carteira->getId());
+            auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteira->getId());
+
+            double patrimonioMoedas = 0.0;
+            if (!movimentacoes.empty()) {
+                auto it_max = max_element(movimentacoes.cbegin(), movimentacoes.cend(), 
+                    [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
+                        return a->getData() < b->getData();
+                    });
+                string dataUltimaMov = (*it_max)->getData();
+                patrimonioMoedas = quantidadeMoedas * getCotacao(dataUltimaMov);
+            }
+
+            double saldoTotal = patrimonioMoedas + fluxoDetalhado.fluxoLiquido;
+
             reportData.push_back({
                 carteira->getId(),
                 carteira->getTitular(),
-                getCarteiraQuantidadeMoedas(carteira->getId()),
-                getCarteiraFluxoCaixa(carteira->getId())
+                quantidadeMoedas,
+                saldoTotal
             });
         }
 
         switch (opcao) {
             case 1: // Saldo
                 sort(reportData.begin(), reportData.end(), [](const CarteiraReportInfo& a, const CarteiraReportInfo& b) {
-                    return a.fluxoCaixa > b.fluxoCaixa;
+                    return a.saldoTotal > b.saldoTotal;
                 });
                 break;
             case 2: // Moedas
@@ -316,7 +360,7 @@ void Controller::reportSaldo()
         }
 
         cout << "\n------------------------------------------------------------------------\n";
-        cout << left << setw(5) << "ID" << setw(20) << "Titular" << setw(20) << "Qtd. Moedas" << "Fluxo de Caixa (R$)" << endl;
+        cout << left << setw(5) << "ID" << setw(20) << "Titular" << setw(20) << "Qtd. Moedas" << "Saldo Total (R$)" << endl;
         cout << "------------------------------------------------------------------------\n";
 
         stringstream ss;
@@ -325,69 +369,77 @@ void Controller::reportSaldo()
             ss << left << setw(5) << info.id << setw(20) << info.titular 
                << setw(20) << fixed << setprecision(8) << info.quantidadeMoedas;
             
-            if (info.fluxoCaixa >= 0) {
+            if (info.saldoTotal >= 0) {
                 ss << VERDE;
             } else {
                 ss << VERMELHO;
             }
-            ss << fixed << setprecision(2) << info.fluxoCaixa << RESET;
+            ss << fixed << setprecision(2) << info.saldoTotal << RESET;
             printSlowly(ss.str(), 5);
         }
         cout << "------------------------------------------------------------------------\n";
-        esperar(5);
+        esperarInterativo(5);
     }
 }
 
 void Controller::reportHistorico()
 {
     Menu menu;
-    menu.setTitle("Historico de Movimentacoes");
-    menu.addOption("Listar Todas as Movimentacoes");
-    menu.addOption("Filtrar por ID da Carteira");
+    menu.setTitle("Historico Geral de Movimentacoes");
     menu.addOption("Ordenar por Data (Mais Recentes)");
     menu.addOption("Ordenar por Data (Mais Antigas)");
+    menu.addOption("Ordenar por ID da Carteira");
+    menu.addOption("Ordenar por ID da Movimentacao");
     menu.addOption("Voltar");
 
     while (true) {
         int opcao = menu.getOption();
-        if (opcao == 5) break;
+        if (opcao == 5) break; // Voltar
 
         auto movimentacoes = _movimentacaoDAO->findAll();
         if (movimentacoes.empty()) {
             cout << "\nNenhuma movimentacao encontrada.\n";
-            esperar(3);
+            esperarInterativo(3);
             return;
         }
 
         switch (opcao) {
-            case 1: 
-                // Nenhuma ordenação necessária
-                break;
-            case 2:
-                reportHistoricoPorCarteira(); 
-                continue; // reportHistoricoPorCarteira já tem sua própria espera
-            case 3: // Mais recentes
+            case 1: // Mais recentes
                 sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
                     return a->getData() > b->getData();
                 });
                 break;
-            case 4: // Mais antigas
+            case 2: // Mais antigas
                 sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
                     return a->getData() < b->getData();
                 });
                 break;
+            case 3: // ID da Carteira
+                sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
+                    if (a->getCarteiraId() != b->getCarteiraId()) {
+                        return a->getCarteiraId() < b->getCarteiraId();
+                    }
+                    return a->getId() < b->getId(); // Critério de desempate
+                });
+                break;
+            case 4: // ID da Movimentacao
+                sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
+                    return a->getId() < b->getId();
+                });
+                break;
         }
         printMovimentacoes(movimentacoes);
-        esperar(5);
+        esperarInterativo(5);
     }
 }
 
 void Controller::reportGanhoPerda()
 {
+    double totalGanhoPerda = 0;
     auto movimentacoes = _movimentacaoDAO->findAll();
     if (movimentacoes.empty()) {
         cout << "\nNenhuma movimentacao encontrada para calcular ganhos/perdas.\n";
-        esperar(3);
+        esperarInterativo(3);
         return;
     }
 
@@ -428,88 +480,636 @@ void Controller::reportGanhoPerda()
     printSlowly(ss.str());
     cout << "----------------------------------------\n";
 
-    esperar(5);
+    esperarInterativo(5);
 }
 
-void Controller::reportCarteira()
+void Controller::actionRelatorioCarteiraEspecifica()
 {
-    int id = getValidatedInput<int>("\nDigite o ID da carteira para o relatorio: ");
+    vector<string> menuItens = {
+        "Relatorio de Ganhos e Perdas",
+        "Relatorio de Movimentacoes e Moedas",
+        "Relatorio Geral",
+        "Voltar"};
+    vector<void (Controller::*)()> functions = {
+        &Controller::reportCarteiraGanhosPerdas,
+        &Controller::reportCarteiraMovimentacoesEMoedas,
+        &Controller::reportCarteira};
+    launchActions("Relatorio de Carteira Especifica", menuItens, functions);
+}
 
-    auto carteira = _carteiraDAO->findById(id);
+void Controller::reportCarteiraGanhosPerdas()
+{
+    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira: ");
+    auto carteira = _carteiraDAO->findById(carteiraId);
     if (!carteira) {
         cout << VERMELHO << "\nCarteira nao encontrada!\n" << RESET;
         return;
     }
 
-    cout << CIANO NEGRITO << "\n--- Relatorio da Carteira " << id << " ---" << RESET << endl;
+    cout << CIANO NEGRITO << "\n------------------------------------------------\n";
+    cout << "  Ganhos e Perdas: " << carteira->getTitular() << "\n";
+    cout << "------------------------------------------------\n\n" << RESET;
+
+    double quantidadeMoedas = getCarteiraQuantidadeMoedas(carteiraId);
+    auto fluxoDetalhado = getCarteiraFluxoCaixaDetalhado(carteiraId);
+    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
+
+    double patrimonioMoedas = 0;
+    if (!movimentacoes.empty()) {
+        auto it_max = max_element(movimentacoes.cbegin(), movimentacoes.cend(),
+            [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
+                return a->getData() < b->getData();
+            });
+        string dataUltimaMov = (*it_max)->getData();
+        patrimonioMoedas = quantidadeMoedas * getCotacao(dataUltimaMov);
+    }
+
+    double resultadoTotal = patrimonioMoedas + fluxoDetalhado.fluxoLiquido;
 
     stringstream ss;
-    ss << "Titular: " << carteira->getTitular();
+
+    ss.str("");
+    ss << AMARELO << "Total Gasto em Compras (R$): " << RESET << VERMELHO << fixed << setprecision(2) << fluxoDetalhado.totalCompras << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << "Corretora: " << carteira->getCorretora();
+    ss << AMARELO << "Total Recebido em Vendas (R$): " << RESET << VERDE << fixed << setprecision(2) << fluxoDetalhado.totalVendas << RESET;
     printSlowly(ss.str());
 
-    double quantidadeMoedas = getCarteiraQuantidadeMoedas(id);
-    double fluxoCaixa = getCarteiraFluxoCaixa(id);
     ss.str("");
-    ss << "Saldo de Moedas: " << fixed << setprecision(8) << quantidadeMoedas;
+    ss << AMARELO << "\nBalanço Financeiro (R$): " << RESET;
+    if (fluxoDetalhado.fluxoLiquido >= 0) ss << VERDE; else ss << VERMELHO;
+    ss << fixed << setprecision(2) << fluxoDetalhado.fluxoLiquido << RESET;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "Patrimônio em Moedas (R$): " << RESET;
+    if (patrimonioMoedas >= 0) ss << VERDE; else ss << VERMELHO;
+    ss << fixed << setprecision(2) << patrimonioMoedas << RESET;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO NEGRITO << "\nResultado Total (Ganhos/Perdas) (R$): " << RESET;
+    if (resultadoTotal >= 0) ss << VERDE; else ss << VERMELHO;
+    ss << fixed << setprecision(2) << resultadoTotal << RESET;
     printSlowly(ss.str());
     
-    ss.str("");
-    ss << "Fluxo de Caixa: ";
-    if (fluxoCaixa >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << "R$ " << fixed << setprecision(2) << fluxoCaixa << RESET;
-    printSlowly(ss.str());
+    esperarInterativo(5);
+}
 
-    double ganhoPerda = 0;
-    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(id);
+void Controller::reportCarteiraMovimentacoesEMoedas()
+{
+    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira: ");
+    auto carteira = _carteiraDAO->findById(carteiraId);
+    if (!carteira) {
+        cout << VERMELHO << "\nCarteira nao encontrada!\n" << RESET;
+        return;
+    }
+
+    cout << CIANO NEGRITO << "\n------------------------------------------------\n";
+    cout << "  Movimentacoes e Moedas: " << carteira->getTitular() << "\n";
+    cout << "------------------------------------------------\n\n" << RESET;
+
+    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
+    
+    vector<unique_ptr<Movimentacao>> compras;
     vector<unique_ptr<Movimentacao>> vendas;
-    for(const auto& mov : movimentacoes) {
-        if(mov->getTipoOperacao() == "V") {
+    
+    int qntOperacoesCompra = 0;
+    int qntOperacoesVenda = 0;
+    double totalMoedasCompradas = 0;
+    double totalMoedasVendidas = 0;
+
+    for (auto& mov : movimentacoes) {
+        if (mov->getTipoOperacao() == "C") {
+            totalMoedasCompradas += mov->getQuantidade();
+            qntOperacoesCompra++;
+            compras.push_back(make_unique<Movimentacao>(*mov));
+        } else { // "V"
+            totalMoedasVendidas += mov->getQuantidade();
+            qntOperacoesVenda++;
             vendas.push_back(make_unique<Movimentacao>(*mov));
         }
     }
 
-    if (!vendas.empty()) {
-        for (const auto& venda : vendas) {
-            double custoMedio = 0;
-            double totalComprado = 0;
-            double moedasCompradas = 0;
+    cout << CIANO << "\n--- Movimentacoes Compra ---\n" << RESET;
+    if (compras.empty()) {
+        cout << AMARELO << "Nenhuma operacao de compra registrada." << RESET << endl;
+    } else {
+        printMovimentacoes(compras);
+    }
 
-            for (const auto& mov : movimentacoes) {
-                if (mov->getTipoOperacao() == "C" && mov->getData() <= venda->getData()) {
-                    totalComprado += getCotacao(mov->getData()) * mov->getQuantidade();
-                    moedasCompradas += mov->getQuantidade();
-                }
-            }
-            custoMedio = (moedasCompradas > 0) ? totalComprado / moedasCompradas : 0;
+    cout << CIANO << "\n--- Movimentacoes Venda ---\n" << RESET;
+    if (vendas.empty()) {
+        cout << AMARELO << "Nenhuma operacao de venda registrada." << RESET << endl;
+    } else {
+        printMovimentacoes(vendas);
+    }
+    
+    double saldoAtualMoedas = getCarteiraQuantidadeMoedas(carteiraId);
+
+    cout << CIANO << "\n--- Resumo de Moedas ---\n" << RESET;
+    stringstream ss;
+    
+    ss << AMARELO << "\nTotal de Moedas Compradas: " << RESET << fixed << setprecision(8) << totalMoedasCompradas;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "Quantidade de Operacoes de Compra: " << RESET << VERDE << qntOperacoesCompra << RESET;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "\nTotal de Moedas Vendidas: " << RESET << fixed << setprecision(8) << totalMoedasVendidas;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "Quantidade de Operacoes de Venda: " << RESET << VERDE << qntOperacoesVenda << RESET;
+    printSlowly(ss.str());
+    
+    printSlowly("\n");
+
+    ss.str("");
+    ss << AMARELO << "Saldo Atual de Moedas: " << RESET << fixed << setprecision(8) << saldoAtualMoedas;
+    printSlowly(ss.str());
+
+    esperarInterativo(5);
+}
+
+void Controller::reportCarteira()
+{
+    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira: ");
+
+    auto carteira = _carteiraDAO->findById(carteiraId);
+    if (!carteira)
+    {
+        cout << VERMELHO << "\nCarteira nao encontrada!\n" << RESET;
+        return;
+    }
+
+    cout << CIANO NEGRITO << "\n------------------------------------------------\n";
+    cout << "      Relatorio da Carteira " << carteira->getTitular() << "\n";
+    cout << "------------------------------------------------\n\n" << RESET;
+
+    double quantidadeMoedas = getCarteiraQuantidadeMoedas(carteiraId);
+    auto fluxoDetalhado = getCarteiraFluxoCaixaDetalhado(carteiraId);
+    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
+
+    double patrimonioMoedas = 0;
+    if (!movimentacoes.empty()) {
+        auto it_max = max_element(movimentacoes.cbegin(), movimentacoes.cend(),
+            [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
+                return a->getData() < b->getData();
+            });
+        string dataUltimaMov = (*it_max)->getData();
+        patrimonioMoedas = quantidadeMoedas * getCotacao(dataUltimaMov);
+    }
+
+    double resultadoTotal = patrimonioMoedas + fluxoDetalhado.fluxoLiquido;
+
+    stringstream ss;
+    ss << AMARELO << "Saldo de Moedas: " << RESET << fixed << setprecision(8) << quantidadeMoedas;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "Total Gasto em Compras (R$): " << RESET << VERMELHO << fixed << setprecision(2) << fluxoDetalhado.totalCompras << RESET;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "Total Recebido em Vendas (R$): " << RESET << VERDE << fixed << setprecision(2) << fluxoDetalhado.totalVendas << RESET;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "\nBalanço Financeiro (R$): " << RESET;
+    if (fluxoDetalhado.fluxoLiquido >= 0) ss << VERDE; else ss << VERMELHO;
+    ss << fixed << setprecision(2) << fluxoDetalhado.fluxoLiquido << RESET;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO << "Patrimônio em Moedas (R$): " << RESET;
+    if (patrimonioMoedas >= 0) ss << VERDE; else ss << VERMELHO;
+    ss << fixed << setprecision(2) << patrimonioMoedas << RESET;
+    printSlowly(ss.str());
+
+    ss.str("");
+    ss << AMARELO NEGRITO << "\nResultado Total (Ganhos/Perdas) (R$): " << RESET;
+    if (resultadoTotal >= 0) ss << VERDE; else ss << VERMELHO;
+    ss << fixed << setprecision(2) << resultadoTotal << RESET;
+    printSlowly(ss.str());
+
+    if (movimentacoes.empty())
+    {
+        cout << AMARELO << "\nNenhuma movimentacao registrada para esta carteira." << RESET << endl;
+    }
+    else
+    {
+        cout << CIANO << "\n--- Historico de Movimentacoes ---\n" << RESET;
+    printMovimentacoes(movimentacoes);
+    }
+    esperarInterativo(5);
+}
+
+void Controller::showSystemHelp()
+{
+    cout << CIANO NEGRITO << "\n--- AJUDA DO SISTEMA FT COIN ---\n\n" << RESET;
+    
+    auto printBlock = [this](const vector<string>& block) {
+        for(const auto& line : block) {
+            printSlowly(line, 9);
+        }
+    };
+
+    vector<string> menu_principal_text = {
+        string(AMARELO) + "MENU PRINCIPAL:" + RESET,
+        "1. Gerenciar Carteiras - Crie, edite, exclua e liste suas carteiras de moedas.",
+        "2. Compra & Venda de Moedas - Registre suas operacoes de compra e venda.",
+        "3. Relatorios - Gere relatorios globais, por carteira ou sobre as cotacoes.",
+        "4. Ajuda - Exibe este menu de ajuda e os creditos do sistema.",
+        "5. Sair - Encerra o programa."
+    };
+    printBlock(menu_principal_text);
+    esperar(1);
+
+    vector<string> funcionalidades_text = {
+        string(AMARELO) + "\nFUNCIONALIDADES:" + RESET,
+        "- Os relatorios de carteira permitem uma analise detalhada de ganhos, perdas e movimentacoes.",
+        "- O oraculo de cotacao busca e armazena os valores da moeda para garantir consistencia nos calculos."
+    };
+    printBlock(funcionalidades_text);
+    esperar(1);
+
+    vector<string> comandos_text = {
+        string(AMARELO) + "\nCOMANDOS:" + RESET,
+        "- Utilize os numeros correspondentes para navegar pelos menus.",
+        "- Siga as instrucoes exibidas em cada tela para inserir dados.",
+        "- Datas devem ser inseridas no formato DD-MM-AAAA."
+    };
+    printBlock(comandos_text);
+    esperar(1);
+    
+    vector<string> mais_info_text = {
+        string(AMARELO) + "\nPARA MAIS INFORMACOES:" + RESET,
+        "Consulte a documentacao do projeto ou entre em contato com a equipe de desenvolvimento."
+    };
+    printBlock(mais_info_text);
+
+    esperarInterativo(5);
+}
+
+void Controller::showCredits()
+{
+    vector<string> credits_art = {
+        "   _____ _____  ______ _____ _____ _______ _____ ",
+        "  / ____|  __ \\|  ____|  __ \\_   _|__   __/ ____|",
+        " | |    | |__) | |__  | |  | || |    | | | (___  ",
+        " | |    |  _  /|  __| | |  | || |    | |  \\___ \\ ",
+        " | |____| | \\ \\| |____| |__| || |_   | |  ____) |",
+        "  \\_____|_|  \\_\\______|_____/_____|  |_| |_____/ ",
+        "                                                 ",
+        "                                                 "
+    };
+
+    cout << CIANO NEGRITO;
+    for(const auto& line : credits_art) {
+        printSlowly(line, 8);
+    }
+    cout << RESET;
+
+    auto printBlock = [this](const vector<string>& block) {
+        for(const auto& line : block) {
+            printSlowly(line, 9);
+        }
+    };
+
+    vector<string> info_text = {
+        "\nSISTEMA FT COIN",
+        "Versao: 1.0.0",
+        "Data de Lancamento: Julho de 2025"
+    };
+    printBlock(info_text);
+    esperar(1);
+
+    vector<string> dev_text = {
+        string(AMARELO) + "\nDESENVOLVIDO POR:" + RESET,
+        "Gustavo Soares Almeida\nHans William Hamann\nMarcelo Dos Santos Da Boa Morte\nNicolas Lourenço Mafei\nRenan Felipe Rodrigues"
+    };
+    printBlock(dev_text);
+    esperar(1);
+
+    vector<string> rights_text = {
+        string(AMARELO) + "\nDIREITOS:" + RESET,
+        "© 2025 FT-Coin. Todos os direitos reservados."
+    };
+    printBlock(rights_text);
+    esperar(1);
+
+    vector<string> uni_text = {
+        "\nUNICAMP - Universidade Estadual de Campinas",
+        "Disciplina: SI300 - Programação Orientada a Objetos I",
+        "2º Semestre de 2025"
+    };
+    printBlock(uni_text);
+
+    esperarInterativo(5);
+}
+
+void Controller::esperar(int seconds)
+{
+    sleep(seconds);
+}
+
+void Controller::esperarInterativo(int seconds)
+{
+    // Salva as configurações atuais do terminal
+    struct termios oldt, newt;
+    int oldf;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+
+    // Desativa o modo canônico e o eco para ler as teclas imediatamente
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+    cout << CIANO << "\n\nPressione ENTER para pular ou aguarde o retorno ao menu... " << RESET << endl;
+
+    for (int i = seconds; i > 0; --i) {
+        cout << CIANO << "Retornando em " << i << "s..." << flush;
+        
+        // Pausa por 1 segundo
+        this_thread::sleep_for(chrono::seconds(1));
+
+        // Verifica se 'Enter' foi pressionado
+        char ch = getchar();
+        if (ch == '\n') {
+            break;
+        }
+        cout << "\r"; // Move o cursor para o início da linha
+    }
+
+    // Restaura as configurações originais do terminal
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+    cout << "\r                                                     \r" << flush; // Limpa a linha
+}
+
+void Controller::printSlowly(const string& text, int delay_ms)
+{
+    for (const char c : text) {
+        cout << c << flush;
+        this_thread::sleep_for(chrono::milliseconds(delay_ms));
+    }
+    cout << endl;
+}
+
+void Controller::actionRelatorioOraculo()
+{
+    vector<string> menuItens = {
+        "Listar Historico Cotacao",
+        "Listar Cotacao por Data Especifica",
+        "Relatorio Geral de Cotacao",
+        "Voltar"};
+    vector<void (Controller::*)()> functions = {
+        &Controller::listarHistoricoCotacao,
+        &Controller::listarCotacaoPorData,
+        &Controller::relatorioGeralCotacao
+        };
+    launchActions("Relatorio de Cotacao do Oraculo", menuItens, functions);
+}
+
+void Controller::listarHistoricoCotacao()
+{
+    if (_type == DataBaseSelector::DATABASE) {
+        try {
+            unique_ptr<sql::Statement> stmnt(_dbConnection->getConnection()->createStatement());
+            sql::ResultSet* res = stmnt->executeQuery("SELECT DATE_FORMAT(Data, '%d-%m-%Y') as DataFormatada, Cotacao FROM ORACULO ORDER BY Data ASC");
             
-            double valorVenda = getCotacao(venda->getData()) * venda->getQuantidade();
-            double custoDaVenda = custoMedio * venda->getQuantidade();
-            ganhoPerda += (valorVenda - custoDaVenda);
+            cout << CIANO NEGRITO << "\n--- Historico de Cotacoes do Oraculo (BD) ---\n" << RESET;
+            cout << "---------------------------------------\n";
+            cout << left << setw(15) << "Data" << "Cotacao (R$)" << endl;
+            cout << "---------------------------------------\n";
+            
+            while (res->next()) {
+                cout << left << setw(15) << res->getString("DataFormatada") << fixed << setprecision(2) << res->getDouble("Cotacao") << endl;
+            }
+            cout << "---------------------------------------\n";
+            delete res;
+        } catch (sql::SQLException& e) {
+            cerr << VERMELHO << "Erro ao consultar o banco de dados: " << e.what() << RESET << endl;
+        }
+    } else { // MEMORY
+        if (_oracle_mem.empty()) {
+            cout << AMARELO << "\nNenhuma cotacao registrada no oraculo." << RESET << endl;
+            esperarInterativo(3);
+            return;
+        }
+
+        vector<pair<string, double>> cotacoes(_oracle_mem.begin(), _oracle_mem.end());
+        sort(cotacoes.begin(), cotacoes.end(), [](const pair<string, double>& a, const pair<string, double>& b) {
+            string dataA = a.first.substr(6, 4) + a.first.substr(3, 2) + a.first.substr(0, 2);
+            string dataB = b.first.substr(6, 4) + b.first.substr(3, 2) + b.first.substr(0, 2);
+            return dataA < dataB;
+        });
+
+        cout << CIANO NEGRITO << "\n--- Historico de Cotacoes do Oraculo (Memoria) ---\n" << RESET;
+        cout << "---------------------------------------\n";
+        cout << left << setw(15) << "Data" << "Cotacao (R$)" << endl;
+        cout << "---------------------------------------\n";
+        
+        for (const auto& cotacao : cotacoes) {
+            cout << left << setw(15) << cotacao.first << fixed << setprecision(2) << cotacao.second << endl;
+        }
+        cout << "---------------------------------------\n";
+    }
+    esperarInterativo(5);
+}
+
+void Controller::relatorioGeralCotacao()
+{
+    if (_type == DataBaseSelector::DATABASE) {
+        try {
+            unique_ptr<sql::Statement> stmnt(_dbConnection->getConnection()->createStatement());
+            sql::ResultSet* res = stmnt->executeQuery(
+                "SELECT "
+                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as maxVal, "
+                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as maxDate, "
+                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as minVal, "
+                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as minDate, "
+                "AVG(Cotacao) as media FROM ORACULO"
+            );
+
+            if (res->next()) {
+                cout << CIANO NEGRITO << "\n--- Relatorio Geral de Cotacoes (BD) ---\n\n" << RESET;
+                stringstream ss;
+
+                ss << AMARELO << "Cotacao Maxima: " << RESET << VERDE << fixed << setprecision(2) << res->getDouble("maxVal") << " (em " << res->getString("maxDate") << ")" << RESET;
+                printSlowly(ss.str());
+
+                ss.str("");
+                ss << AMARELO << "Cotacao Minima: " << RESET << VERMELHO << fixed << setprecision(2) << res->getDouble("minVal") << " (em " << res->getString("minDate") << ")" << RESET;
+                printSlowly(ss.str());
+
+                ss.str("");
+                ss << AMARELO << "Cotacao Media:  " << RESET << fixed << setprecision(2) << res->getDouble("media");
+                printSlowly(ss.str());
+            } else {
+                 cout << AMARELO << "\nNenhuma cotacao registrada no oraculo." << RESET << endl;
+            }
+            delete res;
+
+        } catch (sql::SQLException& e) {
+            cerr << VERMELHO << "Erro ao consultar o banco de dados: " << e.what() << RESET << endl;
+        }
+
+    } else { // MEMORY
+        if (_oracle_mem.empty()) {
+            cout << AMARELO << "\nNenhuma cotacao registrada no oraculo." << RESET << endl;
+            esperarInterativo(3);
+            return;
+        }
+
+        double maxVal = -1.0;
+        string maxDate;
+        double minVal = numeric_limits<double>::max();
+        string minDate;
+        double sum = 0.0;
+
+        for (const auto& par : _oracle_mem) {
+            if (par.second > maxVal) {
+                maxVal = par.second;
+                maxDate = par.first;
+            }
+            if (par.second < minVal) {
+                minVal = par.second;
+                minDate = par.first;
+            }
+            sum += par.second;
+        }
+
+        double media = sum / _oracle_mem.size();
+
+        cout << CIANO NEGRITO << "\n--- Relatorio Geral de Cotacoes (Memoria) ---\n\n" << RESET;
+        stringstream ss;
+
+        ss << AMARELO << "Cotacao Maxima: " << RESET << VERDE << fixed << setprecision(2) << maxVal << " (em " << maxDate << ")" << RESET;
+        printSlowly(ss.str());
+
+        ss.str("");
+        ss << AMARELO << "Cotacao Minima: " << RESET << VERMELHO << fixed << setprecision(2) << minVal << " (em " << minDate << ")" << RESET;
+        printSlowly(ss.str());
+
+        ss.str("");
+        ss << AMARELO << "Cotacao Media:  " << RESET << fixed << setprecision(2) << media;
+        printSlowly(ss.str());
+    }
+    esperarInterativo(5);
+}
+
+void Controller::listarCotacaoPorData()
+{
+    string data = getValidatedDate("Digite a data para a consulta (DD-MM-AAAA): ");
+    
+    // A função getCotacao já lida com BD e memória, então não precisa de lógica dupla aqui.
+    // Ela já insere no _oracle_mem se não encontrar, e também no BD se for o caso.
+    double cotacao = getCotacao(data);
+
+    cout << "\n";
+    stringstream ss;
+    ss << AMARELO << "Cotacao para a data " << RESET << data << AMARELO << " e de: " << RESET << VERDE << "R$ " << fixed << setprecision(2) << cotacao << RESET;
+    printSlowly(ss.str());
+    esperarInterativo(3);
+}
+
+void Controller::printMovimentacoes(const vector<unique_ptr<Movimentacao>>& movimentacoes)
+{
+    cout << "\n----------------------------------------------------------------------------------\n";
+    cout << left << setw(5) << "ID" << setw(15) << "ID Carteira" << setw(20) << "Tipo" << setw(25) << "Data" << "Quantidade" << endl;
+    cout << "----------------------------------------------------------------------------------\n";
+
+    if (movimentacoes.empty()) {
+        cout << "Nenhuma movimentacao encontrada.\n";
+    } else {
+        stringstream ss;
+        for (const auto& mov : movimentacoes) {
+            ss.str(""); // Limpa o stream
+            
+            string tipo_str;
+            if (mov->getTipoOperacao() == "C") {
+                tipo_str = VERDE + string("Compra") + RESET;
+            } else {
+                tipo_str = VERMELHO + string("Venda") + RESET;
+            }
+
+            ss << left << setw(5) << mov->getId() << setw(15) << mov->getCarteiraId() << setw(20) << tipo_str
+               << setw(25) << mov->getData() << fixed << setprecision(8) << mov->getQuantidade();
+            printSlowly(ss.str(), 5);
+        }
+    }
+    cout << "----------------------------------------------------------------------------------\n";
+}
+
+template<typename T>
+T Controller::getValidatedInput(const string& prompt) {
+    T value;
+    cout << prompt;
+    while (!(cin >> value)) {
+        cout << VERMELHO << "\nEntrada inválida. Por favor, digite um valor numérico." << RESET << endl;
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << prompt;
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    return value;
+}
+
+bool Controller::isValidDate(int d, int m, int y)
+{
+    if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) {
+        return false;
+    }
+
+    if (m == 2) {
+        bool isLeap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+        if (isLeap) {
+            return d <= 29;
+        } else {
+            return d <= 28;
         }
     }
 
-    ss.str("");
-    ss << "Ganhos/Perdas da Carteira: ";
-    if (ganhoPerda >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << "R$ " << fixed << setprecision(2) << ganhoPerda << RESET;
-    printSlowly(ss.str());
+    if (m == 4 || m == 6 || m == 9 || m == 11) {
+        return d <= 30;
+    }
 
-    cout << "\n--- Historico de Movimentacoes da Carteira ---\n";
-    printMovimentacoes(movimentacoes);
-    esperar(5);
+    return true;
 }
 
-void Controller::showHelp()
-{
-    cout << CIANO NEGRITO << "\n--- Ajuda: FT-Coin ---" << RESET << endl;
-    cout << "Preciso Fazer\n";
+string Controller::getValidatedDate(const string& prompt) {
+    string date_str;
+    regex date_regex(R"(^(\d{2})-(\d{2})-(\d{4})$)");
+    smatch matches;
 
-    esperar(5);
+    while (true) {
+        cout << prompt;
+        getline(cin, date_str);
+        if (regex_match(date_str, matches, date_regex)) {
+            int d = stoi(matches[1].str());
+            int m = stoi(matches[2].str());
+            int y = stoi(matches[3].str());
+
+            if (isValidDate(d, m, y)) {
+                return matches[3].str() + "-" + matches[2].str() + "-" + matches[1].str();
+            } else {
+                cout << VERMELHO << "Data invalida. O dia ou mes estao fora do intervalo para o ano." << RESET << endl;
+            }
+        } else {
+            cout << VERMELHO << "Formato de data invalido. Use DD-MM-AAAA. Por favor, tente novamente." << RESET << endl;
+        }
+    }
 }
+
+template int Controller::getValidatedInput<int>(const string& prompt);
+template double Controller::getValidatedInput<double>(const string& prompt);
 
 void Controller::listAll()
 {
@@ -562,19 +1162,20 @@ double Controller::getCarteiraQuantidadeMoedas(int carteiraId)
     return quantidade;
 }
 
-double Controller::getCarteiraFluxoCaixa(int carteiraId)
+CarteiraFluxoCaixaDetalhado Controller::getCarteiraFluxoCaixaDetalhado(int carteiraId)
 {
     auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
-    double fluxoCaixa = 0;
+    double totalCompras = 0;
+    double totalVendas = 0;
     for (const auto& mov : movimentacoes) {
-        double cotacao = getCotacao(mov->getData());
+        double valorOperacao = getCotacao(mov->getData()) * mov->getQuantidade();
         if (mov->getTipoOperacao() == "C") {
-            fluxoCaixa -= mov->getQuantidade() * cotacao;
+            totalCompras += valorOperacao;
         } else {
-            fluxoCaixa += mov->getQuantidade() * cotacao;
+            totalVendas += valorOperacao;
         }
     }
-    return fluxoCaixa;
+    return {totalCompras, totalVendas, totalVendas - totalCompras};
 }
 
 void Controller::createCotacao(const string& data, double cotacao)
@@ -646,118 +1247,4 @@ double Controller::getCotacao(const string& data)
             return 5.0;
         }
     }
-}
-
-void Controller::reportHistoricoPorCarteira()
-{
-    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira: ");
-    
-    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
-    printMovimentacoes(movimentacoes);
-}
-
-void Controller::printMovimentacoes(const vector<unique_ptr<Movimentacao>>& movimentacoes)
-{
-    cout << "\n----------------------------------------------------------------------------------\n";
-    cout << left << setw(5) << "ID" << setw(15) << "ID Carteira" << setw(20) << "Tipo" << setw(25) << "Data" << "Quantidade" << endl;
-    cout << "----------------------------------------------------------------------------------\n";
-
-    if (movimentacoes.empty()) {
-        cout << "Nenhuma movimentacao encontrada.\n";
-    } else {
-        stringstream ss;
-        for (const auto& mov : movimentacoes) {
-            ss.str(""); // Limpa o stream
-            
-            string tipo_str;
-            if (mov->getTipoOperacao() == "C") {
-                tipo_str = VERDE + string("Compra") + RESET;
-            } else {
-                tipo_str = VERMELHO + string("Venda") + RESET;
-            }
-
-            ss << left << setw(5) << mov->getId() << setw(15) << mov->getCarteiraId() << setw(20) << tipo_str
-               << setw(25) << mov->getData() << fixed << setprecision(8) << mov->getQuantidade();
-            printSlowly(ss.str(), 5);
-        }
-    }
-    cout << "----------------------------------------------------------------------------------\n";
-}
-
-template<typename T>
-T Controller::getValidatedInput(const string& prompt) {
-    T value;
-    cout << prompt;
-    while (!(cin >> value)) {
-        cout << VERMELHO << "\nEntrada inválida. Por favor, digite um valor numérico." << RESET << endl;
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        cout << prompt;
-    }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-    return value;
-}
-
-string Controller::getValidatedDate(const string& prompt) {
-    string date;
-    regex date_regex(R"(^\d{2}-\d{2}-\d{4}$)");
-    while (true) {
-        cout << prompt;
-        getline(cin, date);
-        if (regex_match(date, date_regex)) {
-            string dd = date.substr(0, 2);
-            string mm = date.substr(3, 2);
-            string yyyy = date.substr(6, 4);
-            return yyyy + "-" + mm + "-" + dd;
-        }
-        cout << VERMELHO << "Formato de data invalido. Use DD-MM-AAAA. Por favor, tente novamente." << RESET << endl;
-    }
-}
-
-template int Controller::getValidatedInput<int>(const string& prompt);
-template double Controller::getValidatedInput<double>(const string& prompt);
-
-void Controller::esperar(int seconds)
-{
-    // Salva as configurações atuais do terminal
-    struct termios oldt, newt;
-    int oldf;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-
-    // Desativa o modo canônico e o eco para ler as teclas imediatamente
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-
-    cout << CIANO << "\n\nPressione ENTER para pular ou aguarde o retorno ao menu... " << RESET << endl;
-
-    for (int i = seconds; i > 0; --i) {
-        cout << CIANO << "Retornando em " << i << "s..." << flush;
-        
-        // Pausa por 1 segundo
-        this_thread::sleep_for(chrono::seconds(1));
-
-        // Verifica se 'Enter' foi pressionado
-        char ch = getchar();
-        if (ch == '\n') {
-            break;
-        }
-        cout << "\r"; // Move o cursor para o início da linha
-    }
-
-    // Restaura as configurações originais do terminal
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-    cout << "\r                                                     \r" << flush; // Limpa a linha
-}
-
-void Controller::printSlowly(const string& text, int delay_ms)
-{
-    for (const char c : text) {
-        cout << c << flush;
-        this_thread::sleep_for(chrono::milliseconds(delay_ms));
-    }
-    cout << endl;
 }
