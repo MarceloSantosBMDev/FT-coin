@@ -1,48 +1,53 @@
 #include "Controller.h"
+
+// Project Headers
 #include "Menu.h"
-#include "CarteiraMemDAO.h"
-#include "CarteiraBDDAO.h"
-#include "MovimentacaoMemDAO.h"
-#include "MovimentacaoBDDAO.h"
-#include "ConnectDB.h"
-#include "cores.h"
-#include "Carteira.h"
-#include "Movimentacao.h"
+#include "WalletMemDAO.h"
+#include "WalletDBDAO.h"
+#include "TransactionMemDAO.h"
+#include "TransactionDBDAO.h"
+#include "Colors.h"
+#include "Wallet.h"
+#include "Transaction.h"
+
+// External Libraries
+#include <mariadb/conncpp.hpp>
+
+// Standard C++ Libraries
 #include <iostream>
 #include <iomanip>
-#include <string>
-#include <vector>
+#include <sstream>
 #include <algorithm>
 #include <functional>
-#include <memory>
-#include <mariadb/conncpp.hpp>
-#include <cstdlib>
-#include <ctime>
 #include <random>
 #include <limits>
 #include <regex>
 #include <thread>
 #include <chrono>
+
+// System Libraries (C-style)
 #include <termios.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <fcntl.h>
-#include <sstream>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
-Controller::Controller(DataBaseSelector dbType) : _type(dbType)
+Controller::Controller(DataBaseSelector dbType)
 {
+    type = dbType;
     if (dbType == DataBaseSelector::MEMORY)
     {
-        _carteiraDAO = make_unique<CarteiraMemDAO>();
-        _movimentacaoDAO = make_unique<MovimentacaoMemDAO>();
+        walletDAO = make_unique<WalletMemDAO>();
+        transactionDAO = make_unique<TransactionMemDAO>();
     }
     else
     {
-        _dbConnection = make_unique<ConnectDB>();
-        _carteiraDAO = make_unique<CarteiraBDDAO>(_dbConnection.get());
-        _movimentacaoDAO = make_unique<MovimentacaoBDDAO>(_dbConnection.get());
+        dbConnection = make_unique<ConnectDB>();
+        walletDAO = make_unique<WalletDBDAO>(dbConnection.get());
+        transactionDAO = make_unique<TransactionDBDAO>(dbConnection.get());
     }
 }
 
@@ -58,659 +63,723 @@ void Controller::start()
         " |_|       |_|       \\_____\\____/_____|_| \\_|"
     };
 
-    cout << VERDE NEGRITO;
+    cout << GREEN << BOLD;
     for(const auto& line : welcome_art) {
         printSlowly(line, 10);
     }
     cout << RESET;
-    printSlowly(CIANO "\nSistema de Apuracao de Ganhos e Perdas em Carteira de Moedas" RESET, 15);
+    printSlowly(string(CYAN) + "\nCoin Wallet Gains and Losses Calculation System" + RESET, 15);
+
+    string mode = (type == DataBaseSelector::MEMORY) ? "Memory" : "Database";
+    printSlowly(string(CYAN) + BOLD + mode + " Version 1.1.0" + RESET, 15);
+
     cout << endl;
 
     Menu menu;
-    menu.setTitle("FT-Coin - Sistema de Controle de Carteiras");
-    menu.addOption("Gerenciar Carteiras");
-    menu.addOption("Compra & Venda de Moedas");
-    menu.addOption("Relatorios");
-    menu.addOption("Ajuda");
-    menu.addOption("Sair");
+    menu.setTitle("FT-Coin - Wallet Management System");
+    menu.addOption("Manage Wallets");
+    menu.addOption("Buy & Sell Coins");
+    menu.addOption("Reports");
+    menu.addOption("Help");
+    menu.addOption("Exit");
 
     while (true)
     {
-        int opcao = menu.getOption();
-        switch (opcao)
+        int option = menu.getOption();
+        switch (option)
         {
-        case 1: actionCarteira(); break;
-        case 2: actionMovimentacao(); break;
-        case 3: actionRelatorios(); break;
-        case 4: actionAjuda(); break;
-        case 5: return;
+        case 1: walletActions(); break;
+        case 2: transactionActions(); break;
+        case 3: reportActions(); break;
+        case 4: helpActions(); break;
+        case 5:
+            {
+                cout << "\n";
+                for (int i = 3; i > 0; --i) {
+                    cout << CYAN << "Exiting the program... " << i << flush;
+                    wait(1);
+                    cout << "\r                                                     \r" << flush;
+                }
+                cout << endl;
+                return;
+            }
         }
     }
 }
 
-void Controller::actionCarteira()
+void Controller::walletActions()
 {
-    vector<string> menuItens = {
-        "Nova Carteira", "Editar Carteira", "Excluir Carteira", "Listar Carteiras", "Voltar"};
+    vector<string> menuItems = {
+        "New Wallet", "Edit Wallet", "Delete Wallet", "List Wallets", "Find by Holder", "Back"};
 
     vector<void (Controller::*)()> functions = {
-        &Controller::newCarteira, &Controller::editCarteira, &Controller::deleteCarteira, &Controller::listCarteira};
+        &Controller::newWallet, &Controller::editWallet, &Controller::deleteWallet, &Controller::listWallets, &Controller::findByHolder};
 
-    launchActions("Gerenciamento de Carteiras", menuItens, functions);
+    launchActions("Wallet Management", menuItems, functions);
 }
 
-void Controller::actionMovimentacao()
+void Controller::transactionActions()
 {
-    vector<string> menuItens = {"Registrar Compra", "Registrar Venda", "Voltar"};
-    vector<void (Controller::*)()> functions = {&Controller::newCompra, &Controller::newVenda};
-    launchActions("Movimentacoes", menuItens, functions);
+    vector<string> menuItems = {"Register Purchase", "Register Sale", "Back"};
+    vector<void (Controller::*)()> functions = {&Controller::newPurchase, &Controller::newSale};
+    launchActions("Transactions", menuItems, functions);
 }
 
-void Controller::actionRelatorios()
+void Controller::reportActions()
 {
-    vector<string> menuItens = {
-        "Relatorio Global de Carteiras",
-        "Relatorio de Carteira Especifica",
-        "Relatorio de Cotacao do Oraculo",
-        "Historico Geral de Movimentacoes",
-        "Historico Geral de Ganhos e Perdas",
-        "Voltar"};
+    vector<string> menuItems = {
+        "Global Wallet Report",
+        "Specific Wallet Report",
+        "Oracle Quote Report",
+        "General Transaction History",
+        "General Gains and Losses History",
+        "Back"};
     vector<void (Controller::*)()> functions = {
-        &Controller::reportSaldo,
-        &Controller::actionRelatorioCarteiraEspecifica,
-        &Controller::actionRelatorioOraculo,
-        &Controller::reportHistorico,
-        &Controller::reportGanhoPerda
+        &Controller::reportGlobalBalance,
+        &Controller::specificWalletReportActions,
+        &Controller::oracleReportActions,
+        &Controller::reportHistory,
+        &Controller::reportGainsAndLosses
         };
-    launchActions("Relatorios", menuItens, functions);
+    launchActions("Reports", menuItems, functions);
 }
 
-void Controller::actionAjuda()
+void Controller::helpActions()
 {
-    vector<string> menuItens = {"Ajuda do Sistema", "Creditos", "Voltar"};
+    vector<string> menuItems = {"System Help", "Credits", "Back"};
     vector<void (Controller::*)()> functions = {
         &Controller::showSystemHelp,
         &Controller::showCredits
         };
-    launchActions("Ajuda", menuItens, functions);
+    launchActions("Help", menuItems, functions);
 }
 
-void Controller::launchActions(string title, vector<string> menuItens, vector<void (Controller::*)()> functions)
+void Controller::launchActions(string title, vector<string> menuItems, vector<void (Controller::*)()> functions)
 {
     Menu menu;
     menu.setTitle(title);
-    for (const string& item : menuItens)
+    for (const string& item : menuItems)
     {
         menu.addOption(item);
     }
 
     while (true)
     {
-        int opcao = menu.getOption();
-        if (opcao > functions.size()) return;
-        (this->*functions[opcao - 1])();
+        int option = menu.getOption();
+        if (option >= menuItems.size()) return;
+        
+        // Calls the controller method corresponding to the user's menu choice.
+        (this->*functions[option - 1])();
     }
 }
 
-void Controller::newCarteira()
+void Controller::newWallet()
 {
-    cout << "Digite o titular da nova carteira: ";
-    string titular;
-    getline(cin >> ws, titular);
+    string holder = getValidatedInput<string>("Enter the holder for the new wallet: ");
+    string broker = getValidatedInput<string>("Enter the broker: ");
 
-    cout << "Digite a corretora: ";
-    string corretora;
-    getline(cin, corretora);
-
-    Carteira carteira(titular, corretora);
-    _carteiraDAO->insert(carteira);
-    cout << VERDE << "\nCarteira criada com sucesso!\n" << RESET;
+    Wallet wallet(holder, broker);
+    walletDAO->insert(wallet);
+    cout << GREEN << "\nWallet created successfully!\n" << RESET;
+    interactiveWait(2);
 }
 
-void Controller::editCarteira()
+void Controller::editWallet()
 {
-    int id = getValidatedInput<int>("\nID da carteira que deseja editar: ");
+    int id = getValidatedInput<int>("\nEnter the ID of the wallet you want to edit: ");
 
-    auto carteira = _carteiraDAO->findById(id);
-    if (!carteira)
+    auto wallet = walletDAO->findById(id);
+    if (!wallet)
     {
-        cout << VERMELHO << "\nCarteira nao encontrada!\n" << RESET;
+        cout << RED << "\nWallet not found!\n" << RESET;
         return;
     }
 
     Menu menu;
-    menu.setTitle("Editando Carteira: " + carteira->getTitular());
-    menu.addOption("Alterar Nome do Titular");
-    menu.addOption("Alterar Corretora");
-    menu.addOption("Voltar");
+    menu.setTitle("Editing Wallet: " + wallet->getHolder());
+    menu.addOption("Change Holder Name");
+    menu.addOption("Change Broker");
+    menu.addOption("Back");
 
     while (true)
     {
-        int opcao = menu.getOption();
+        int option = menu.getOption();
         bool updated = false;
 
-        switch (opcao)
+        switch (option)
         {
-            case 1: // Alterar nome
+            case 1: 
             {
-                cout << "Digite o novo nome do titular: ";
-                string titular;
-                getline(cin >> ws, titular);
-                carteira->setTitular(titular);
+                cout << "Enter the new holder name: ";
+                string holder;
+                getline(cin >> ws, holder);
+                wallet->setHolder(holder);
                 updated = true;
                 break;
             }
-            case 2: // Alterar corretora
+            case 2: 
             {
-                cout << "Digite a nova corretora: ";
-                string corretora;
-                getline(cin >> ws, corretora);
-                carteira->setCorretora(corretora);
+                cout << "Enter the new broker: ";
+                string broker;
+                getline(cin >> ws, broker);
+                wallet->setBroker(broker);
                 updated = true;
                 break;
             }
-            case 3: // Voltar
+            case 3: 
                 return;
         }
 
         if (updated)
         {
-            _carteiraDAO->update(*carteira);
-            cout << VERDE << "\nCarteira atualizada com sucesso!\n" << RESET;
-            menu.setTitle("Editando Carteira: " + carteira->getTitular());
-            esperarInterativo(2);
+            walletDAO->update(*wallet);
+            cout << GREEN << "\nWallet updated successfully!\n" << RESET;
+            menu.setTitle("Editing Wallet: " + wallet->getHolder());
+            interactiveWait(2);
         }
     }
 }
 
-void Controller::deleteCarteira()
+void Controller::deleteWallet()
 {
-    int id = getValidatedInput<int>("\nID da carteira: ");
+    int id = getValidatedInput<int>("\nEnter the wallet ID to delete: ");
 
-    if (!_carteiraDAO->findById(id)) {
-        cout << VERMELHO << "\nCarteira com ID " << id << " nao encontrada!\n" << RESET;
+    if (!walletDAO->findById(id)) {
+        cout << RED << "\nWallet with ID " << id << " not found!\n" << RESET;
+        interactiveWait(2);
         return;
     }
 
     try {
-        _movimentacaoDAO->removeByCarteiraId(id);
-        _carteiraDAO->remove(id);
-        cout << VERDE << "Carteira e seu historico de movimentacoes foram excluidos com sucesso!\n" << RESET;
+        transactionDAO->removeByWalletId(id);
+        walletDAO->remove(id);
+        cout << GREEN << "Wallet and its transaction history have been successfully deleted!\n" << RESET;
     } catch (const runtime_error& e) {
-        cerr << VERMELHO << "Erro: " << e.what() << RESET << endl;
+        cerr << RED << "Error: " << e.what() << RESET << endl;
     }
+    interactiveWait(3);
 }
 
-void Controller::listCarteira()
+void Controller::listWallets()
 {
-    listAll();
-    esperarInterativo(5);
+    listAllWallets();
+    interactiveWait(5);
 }
 
-void Controller::newCompra()
+void Controller::newPurchase()
 {
-    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira para a compra: ");
-    if (!_carteiraDAO->findById(carteiraId)) {
-        cout << VERMELHO << "\nCarteira com ID " << carteiraId << " nao encontrada!\n" << RESET;
+    int walletId = getValidatedInput<int>("\nEnter the wallet ID for the purchase: ");
+    if (!walletDAO->findById(walletId)) {
+        cout << RED << "\nWallet with ID " << walletId << " not found!\n" << RESET;
+        interactiveWait(2);
         return;
     }
-    double quantidade = getValidatedInput<double>("Digite a quantidade comprada: ");
-    string data = getValidatedDate("Digite a data da compra (DD-MM-AAAA): ");
+    double quantity = getValidatedInput<double>("Enter the quantity purchased: ");
+    string date = getValidatedDate("Enter the purchase date (DD-MM-YYYY): ");
 
-    getCotacao(data);
+    getQuote(date);
 
-    Movimentacao mov(carteiraId, "C", quantidade, data);
-    _movimentacaoDAO->insert(mov);
+    Transaction transaction(walletId, "C", quantity, date);
+    transactionDAO->insert(transaction);
 
-    cout << VERDE << "\nCompra registrada com sucesso!\n" << RESET;
+    cout << GREEN << "\nPurchase registered successfully!\n" << RESET;
+    interactiveWait(2);
 }
 
-void Controller::newVenda()
+void Controller::newSale()
 {
-    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira para a venda: ");
-    if (!_carteiraDAO->findById(carteiraId)) {
-        cout << VERMELHO << "\nCarteira com ID " << carteiraId << " nao encontrada!\n" << RESET;
+    int walletId = getValidatedInput<int>("\nEnter the wallet ID for the sale: ");
+    if (!walletDAO->findById(walletId)) {
+        cout << RED << "\nWallet with ID " << walletId << " not found!\n" << RESET;
+        interactiveWait(2);
         return;
     }
-    double quantidade = getValidatedInput<double>("Digite a quantidade vendida: ");
-    string data = getValidatedDate("Digite a data da venda (DD-MM-AAAA): ");
+    double quantity = getValidatedInput<double>("Enter the quantity sold: ");
+    string date = getValidatedDate("Enter the sale date (DD-MM-YYYY): ");
 
-    getCotacao(data);
+    getQuote(date);
 
-    Movimentacao mov(carteiraId, "V", quantidade, data);
-    _movimentacaoDAO->insert(mov);
+    Transaction transaction(walletId, "V", quantity, date);
+    transactionDAO->insert(transaction);
 
-    cout << VERDE << "\nVenda registrada com sucesso!\n" << RESET;
+    cout << GREEN << "\nSale registered successfully!\n" << RESET;
+    interactiveWait(2);
 }
 
-void Controller::reportSaldo()
+void Controller::reportGlobalBalance()
 {
     Menu menu;
-    menu.setTitle("Relatorio Global de Carteiras");
-    menu.addOption("Ordenar por Saldo Total");
-    menu.addOption("Ordenar por Quantidade de Moedas");
-    menu.addOption("Ordenar por Nome do Titular");
-    menu.addOption("Ordenar por ID");
-    menu.addOption("Voltar");
+    menu.setTitle("Global Wallet Report");
+    menu.addOption("Sort by Total Balance");
+    menu.addOption("Sort by Coin Quantity");
+    menu.addOption("Sort by Holder Name");
+    menu.addOption("Sort by ID");
+    menu.addOption("Back");
 
-    while (true) {
-        int opcao = menu.getOption();
-        if (opcao == 5) break;
+    while (true)
+    {
+        int option = menu.getOption();
+        if (option == 5) break;
 
-        auto carteiras = _carteiraDAO->findAll();
-        if (carteiras.empty()) {
-            cout << "\nNenhuma carteira encontrada.\n";
+        auto wallets = walletDAO->findAll();
+        if (wallets.empty())
+        {
+            cout << "\nNo wallets found.\n";
             return;
         }
 
-        struct CarteiraReportInfo {
+        struct WalletReportInfo
+        {
             int id;
-            string titular;
-            double quantidadeMoedas;
-            double saldoTotal;
+            string holder;
+            double coinQuantity;
+            double totalBalance;
         };
 
-        vector<CarteiraReportInfo> reportData;
-        for (const auto& carteira : carteiras) {
-            double quantidadeMoedas = getCarteiraQuantidadeMoedas(carteira->getId());
-            auto fluxoDetalhado = getCarteiraFluxoCaixaDetalhado(carteira->getId());
-            auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteira->getId());
+        vector<WalletReportInfo> reportData;
+        for (const auto& wallet : wallets)
+        {
+            double coinQuantity = getWalletCoinQuantity(wallet->getId());
+            auto cashFlowDetails = getWalletCashFlowDetails(wallet->getId());
+            auto transactions = transactionDAO->findByWalletId(wallet->getId());
 
-            double patrimonioMoedas = 0.0;
-            if (!movimentacoes.empty()) {
-                auto it_max = max_element(movimentacoes.cbegin(), movimentacoes.cend(), 
-                    [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
-                        return a->getData() < b->getData();
+            double coinAssets = 0.0;
+            if (!transactions.empty())
+            {
+                // Use last transaction's date for current asset value.
+                auto it_max = max_element(transactions.cbegin(), transactions.cend(), 
+                    [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
+                        return a->getDate() < b->getDate();
                     });
-                string dataUltimaMov = (*it_max)->getData();
-                patrimonioMoedas = quantidadeMoedas * getCotacao(dataUltimaMov);
+                string lastTransactionDate = (*it_max)->getDate();
+                coinAssets = coinQuantity * getQuote(lastTransactionDate);
             }
 
-            double saldoTotal = patrimonioMoedas + fluxoDetalhado.fluxoLiquido;
+            double totalBalance = coinAssets + cashFlowDetails.netFlow;
 
             reportData.push_back({
-                carteira->getId(),
-                carteira->getTitular(),
-                quantidadeMoedas,
-                saldoTotal
+                wallet->getId(),
+                wallet->getHolder(),
+                coinQuantity,
+                totalBalance
             });
         }
 
-        switch (opcao) {
-            case 1: // Saldo
-                sort(reportData.begin(), reportData.end(), [](const CarteiraReportInfo& a, const CarteiraReportInfo& b) {
-                    return a.saldoTotal > b.saldoTotal;
+        switch (option)
+        {
+            case 1: 
+                sort(reportData.begin(), reportData.end(), [](const WalletReportInfo& a, const WalletReportInfo& b) {
+                    return a.totalBalance > b.totalBalance;
                 });
                 break;
-            case 2: // Moedas
-                sort(reportData.begin(), reportData.end(), [](const CarteiraReportInfo& a, const CarteiraReportInfo& b) {
-                    return a.quantidadeMoedas > b.quantidadeMoedas;
+            case 2: 
+                sort(reportData.begin(), reportData.end(), [](const WalletReportInfo& a, const WalletReportInfo& b) {
+                    return a.coinQuantity > b.coinQuantity;
                 });
                 break;
-            case 3: // Nome
-                sort(reportData.begin(), reportData.end(), [](const CarteiraReportInfo& a, const CarteiraReportInfo& b) {
-                    return a.titular < b.titular;
+            case 3: 
+                sort(reportData.begin(), reportData.end(), [](const WalletReportInfo& a, const WalletReportInfo& b) {
+                    return a.holder < b.holder;
                 });
                 break;
-            case 4: // ID
-                sort(reportData.begin(), reportData.end(), [](const CarteiraReportInfo& a, const CarteiraReportInfo& b) {
+            case 4: 
+                sort(reportData.begin(), reportData.end(), [](const WalletReportInfo& a, const WalletReportInfo& b) {
                     return a.id < b.id;
                 });
                 break;
         }
 
         cout << "\n------------------------------------------------------------------------\n";
-        cout << left << setw(5) << "ID" << setw(20) << "Titular" << setw(20) << "Qtd. Moedas" << "Saldo Total (R$)" << endl;
+        cout << left << setw(5) << "ID" << setw(20) << "Holder" << setw(20) << "Coin Qty" << "Total Balance (R$)" << endl;
         cout << "------------------------------------------------------------------------\n";
 
         stringstream ss;
-        for (const auto& info : reportData) {
-            ss.str(""); // Limpa o stream
-            ss << left << setw(5) << info.id << setw(20) << info.titular 
-               << setw(20) << fixed << setprecision(8) << info.quantidadeMoedas;
+        for (const auto& info : reportData)
+        {
+            ss.str(""); // Clear stream
+            ss << left << setw(5) << info.id << setw(20) << info.holder 
+               << setw(20) << fixed << setprecision(8) << info.coinQuantity;
             
-            if (info.saldoTotal >= 0) {
-                ss << VERDE;
-            } else {
-                ss << VERMELHO;
+            if (info.totalBalance >= 0)
+            {
+                ss << GREEN;
             }
-            ss << fixed << setprecision(2) << info.saldoTotal << RESET;
+            else
+            {
+                ss << RED;
+            }
+            ss << fixed << setprecision(2) << info.totalBalance << RESET;
             printSlowly(ss.str(), 5);
         }
         cout << "------------------------------------------------------------------------\n";
-        esperarInterativo(5);
+        interactiveWait(5);
     }
 }
 
-void Controller::reportHistorico()
+void Controller::reportHistory()
 {
     Menu menu;
-    menu.setTitle("Historico Geral de Movimentacoes");
-    menu.addOption("Ordenar por Data (Mais Recentes)");
-    menu.addOption("Ordenar por Data (Mais Antigas)");
-    menu.addOption("Ordenar por ID da Carteira");
-    menu.addOption("Ordenar por ID da Movimentacao");
-    menu.addOption("Voltar");
+    menu.setTitle("General Transaction History");
+    menu.addOption("Sort by Date (Newest)");
+    menu.addOption("Sort by Date (Oldest)");
+    menu.addOption("Sort by Wallet ID");
+    menu.addOption("Sort by Transaction ID");
+    menu.addOption("Back");
 
-    while (true) {
-        int opcao = menu.getOption();
-        if (opcao == 5) break; // Voltar
+    while (true)
+    {
+        int option = menu.getOption();
+        if (option == 5) break; // Back
 
-        auto movimentacoes = _movimentacaoDAO->findAll();
-        if (movimentacoes.empty()) {
-            cout << "\nNenhuma movimentacao encontrada.\n";
-            esperarInterativo(3);
+        auto transactions = transactionDAO->findAll();
+        if (transactions.empty())
+        {
+            cout << "\nNo transactions found.\n";
+            interactiveWait(3);
             return;
         }
 
-        switch (opcao) {
-            case 1: // Mais recentes
-                sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
-                    return a->getData() > b->getData();
+        switch (option)
+        {
+            case 1: 
+                sort(transactions.begin(), transactions.end(), [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
+                    return a->getDate() > b->getDate();
                 });
                 break;
-            case 2: // Mais antigas
-                sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
-                    return a->getData() < b->getData();
+            case 2: 
+                sort(transactions.begin(), transactions.end(), [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
+                    return a->getDate() < b->getDate();
                 });
                 break;
-            case 3: // ID da Carteira
-                sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
-                    if (a->getCarteiraId() != b->getCarteiraId()) {
-                        return a->getCarteiraId() < b->getCarteiraId();
+            case 3: 
+                sort(transactions.begin(), transactions.end(), [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
+                    if (a->getWalletId() != b->getWalletId()) {
+                        return a->getWalletId() < b->getWalletId();
                     }
-                    return a->getId() < b->getId(); // Critério de desempate
+                    return a->getId() < b->getId(); // Tie-breaker
                 });
                 break;
-            case 4: // ID da Movimentacao
-                sort(movimentacoes.begin(), movimentacoes.end(), [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
+            case 4: 
+                sort(transactions.begin(), transactions.end(), [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
                     return a->getId() < b->getId();
                 });
                 break;
         }
-        printMovimentacoes(movimentacoes);
-        esperarInterativo(5);
+        printTransactions(transactions);
+        interactiveWait(5);
     }
 }
 
-void Controller::reportGanhoPerda()
+void Controller::reportGainsAndLosses()
 {
-    double totalGanhoPerda = 0;
-    auto movimentacoes = _movimentacaoDAO->findAll();
-    if (movimentacoes.empty()) {
-        cout << "\nNenhuma movimentacao encontrada para calcular ganhos/perdas.\n";
-        esperarInterativo(3);
+    auto wallets = walletDAO->findAll();
+    if (wallets.empty())
+    {
+        cout << "\nNo wallets found to calculate gains/losses.\n";
+        interactiveWait(3);
         return;
     }
 
-    double totalCompras = 0;
-    double totalVendas = 0;
+    cout << CYAN << BOLD << "\n--- Global Gains and Losses Report ---" << RESET << endl;
+    cout << "--------------------------------------------------------\n";
+    cout << left << setw(25) << "Wallet Holder" << "Balance (R$)" << endl;
+    cout << "--------------------------------------------------------\n";
 
-    for (const auto& mov : movimentacoes) {
-        double valor = getCotacao(mov->getData()) * mov->getQuantidade();
-        if (mov->getTipoOperacao() == "C") {
-            totalCompras += valor;
+    double globalTotalBalance = 0.0;
+    stringstream ss;
+
+    for (const auto& wallet : wallets)
+    {
+        double coinQuantity = getWalletCoinQuantity(wallet->getId());
+        auto cashFlowDetails = getWalletCashFlowDetails(wallet->getId());
+        auto transactions = transactionDAO->findByWalletId(wallet->getId());
+
+        double coinAssets = 0.0;
+        if (!transactions.empty())
+        {
+            auto it_max = max_element(transactions.cbegin(), transactions.cend(),
+                [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
+                    return a->getDate() < b->getDate();
+                });
+            string lastTransactionDate = (*it_max)->getDate();
+            coinAssets = coinQuantity * getQuote(lastTransactionDate);
+        }
+
+        double walletBalance = coinAssets + cashFlowDetails.netFlow;
+        globalTotalBalance += walletBalance;
+
+        ss.str("");
+        ss << left << setw(25) << wallet->getHolder();
+        
+        if (walletBalance >= 0) {
+            ss << GREEN;
         } else {
-            totalVendas += valor;
+            ss << RED;
         }
+        ss << fixed << setprecision(2) << walletBalance << RESET;
+        printSlowly(ss.str(), 5);
     }
-    
-    cout << CIANO NEGRITO << "\n--- Relatorio de Ganhos e Perdas (Global) ---" << RESET << endl;
 
-    stringstream ss;
-    ss << "Total de Compras: R$ " << fixed << setprecision(2) << totalCompras;
-    printSlowly(ss.str());
-
+    cout << "--------------------------------------------------------\n";
     ss.str("");
-    ss << "Total de Vendas: R$ " << fixed << setprecision(2) << totalVendas;
-    printSlowly(ss.str());
-
-    cout << "----------------------------------------\n";
-
-    double resultado = totalVendas - totalCompras;
-
-    ss.str("");
-    ss << "Resultado (Ganhos/Perdas): ";
-    if (resultado >= 0) {
-        ss << VERDE;
+    ss << BOLD << left << setw(25) << "Global Gains and Losses";
+    if (globalTotalBalance >= 0) {
+        ss << GREEN;
     } else {
-        ss << VERMELHO;
+        ss << RED;
     }
-    ss << "R$ " << fixed << setprecision(2) << resultado << RESET;
+    ss << fixed << setprecision(2) << globalTotalBalance << RESET;
     printSlowly(ss.str());
-    cout << "----------------------------------------\n";
+    cout << "--------------------------------------------------------\n";
 
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
-void Controller::actionRelatorioCarteiraEspecifica()
+void Controller::specificWalletReportActions()
 {
-    vector<string> menuItens = {
-        "Relatorio de Ganhos e Perdas",
-        "Relatorio de Movimentacoes e Moedas",
-        "Relatorio Geral",
-        "Voltar"};
+    vector<string> menuItems = {
+        "Gains and Losses Report",
+        "Transactions and Coins Report",
+        "General Report",
+        "Back"};
     vector<void (Controller::*)()> functions = {
-        &Controller::reportCarteiraGanhosPerdas,
-        &Controller::reportCarteiraMovimentacoesEMoedas,
-        &Controller::reportCarteira};
-    launchActions("Relatorio de Carteira Especifica", menuItens, functions);
+        &Controller::reportWalletGainsAndLosses,
+        &Controller::reportWalletTransactionsAndCoins,
+        &Controller::reportWallet};
+    launchActions("Specific Wallet Report", menuItems, functions);
 }
 
-void Controller::reportCarteiraGanhosPerdas()
+void Controller::reportWalletGainsAndLosses()
 {
-    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira: ");
-    auto carteira = _carteiraDAO->findById(carteiraId);
-    if (!carteira) {
-        cout << VERMELHO << "\nCarteira nao encontrada!\n" << RESET;
+    int walletId = getValidatedInput<int>("\nEnter the wallet ID: ");
+    auto wallet = walletDAO->findById(walletId);
+    if (!wallet)
+    {
+        cout << RED << "\nWallet not found!\n" << RESET;
+        interactiveWait(2);
         return;
     }
 
-    cout << CIANO NEGRITO << "\n------------------------------------------------\n";
-    cout << "  Ganhos e Perdas: " << carteira->getTitular() << "\n";
+    cout << CYAN << BOLD << "\n------------------------------------------------\n";
+    cout << "  Gains and Losses: " << wallet->getHolder() << "\n";
     cout << "------------------------------------------------\n\n" << RESET;
 
-    double quantidadeMoedas = getCarteiraQuantidadeMoedas(carteiraId);
-    auto fluxoDetalhado = getCarteiraFluxoCaixaDetalhado(carteiraId);
-    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
+    double coinQuantity = getWalletCoinQuantity(walletId);
+    auto cashFlowDetails = getWalletCashFlowDetails(walletId);
+    auto transactions = transactionDAO->findByWalletId(walletId);
 
-    double patrimonioMoedas = 0;
-    if (!movimentacoes.empty()) {
-        auto it_max = max_element(movimentacoes.cbegin(), movimentacoes.cend(),
-            [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
-                return a->getData() < b->getData();
+    double coinAssets = 0;
+    if (!transactions.empty())
+    {
+        auto it_max = max_element(transactions.cbegin(), transactions.cend(),
+            [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
+                return a->getDate() < b->getDate();
             });
-        string dataUltimaMov = (*it_max)->getData();
-        patrimonioMoedas = quantidadeMoedas * getCotacao(dataUltimaMov);
+        string lastTransactionDate = (*it_max)->getDate();
+        coinAssets = coinQuantity * getQuote(lastTransactionDate);
     }
 
-    double resultadoTotal = patrimonioMoedas + fluxoDetalhado.fluxoLiquido;
+    double totalResult = coinAssets + cashFlowDetails.netFlow;
 
     stringstream ss;
 
     ss.str("");
-    ss << AMARELO << "Total Gasto em Compras (R$): " << RESET << VERMELHO << fixed << setprecision(2) << fluxoDetalhado.totalCompras << RESET;
+    ss << YELLOW << "Total Spent on Purchases (R$): " << RESET << RED << fixed << setprecision(2) << cashFlowDetails.totalPurchases << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "Total Recebido em Vendas (R$): " << RESET << VERDE << fixed << setprecision(2) << fluxoDetalhado.totalVendas << RESET;
+    ss << YELLOW << "Total Received from Sales (R$): " << RESET << GREEN << fixed << setprecision(2) << cashFlowDetails.totalSales << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "\nBalanço Financeiro (R$): " << RESET;
-    if (fluxoDetalhado.fluxoLiquido >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << fixed << setprecision(2) << fluxoDetalhado.fluxoLiquido << RESET;
+    ss << YELLOW << "\nNet Financial Balance (R$): " << RESET;
+    if (cashFlowDetails.netFlow >= 0) ss << GREEN; else ss << RED;
+    ss << fixed << setprecision(2) << cashFlowDetails.netFlow << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "Patrimônio em Moedas (R$): " << RESET;
-    if (patrimonioMoedas >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << fixed << setprecision(2) << patrimonioMoedas << RESET;
+    ss << YELLOW << "Coin Assets (R$): " << RESET;
+    if (coinAssets >= 0) ss << GREEN; else ss << RED;
+    ss << fixed << setprecision(2) << coinAssets << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO NEGRITO << "\nResultado Total (Ganhos/Perdas) (R$): " << RESET;
-    if (resultadoTotal >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << fixed << setprecision(2) << resultadoTotal << RESET;
+    ss << YELLOW << BOLD << "\nTotal Result (Gains/Losses) (R$): " << RESET;
+    if (totalResult >= 0) ss << GREEN; else ss << RED;
+    ss << fixed << setprecision(2) << totalResult << RESET;
     printSlowly(ss.str());
     
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
-void Controller::reportCarteiraMovimentacoesEMoedas()
+void Controller::reportWalletTransactionsAndCoins()
 {
-    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira: ");
-    auto carteira = _carteiraDAO->findById(carteiraId);
-    if (!carteira) {
-        cout << VERMELHO << "\nCarteira nao encontrada!\n" << RESET;
+    int walletId = getValidatedInput<int>("\nEnter the wallet ID: ");
+    auto wallet = walletDAO->findById(walletId);
+    if (!wallet)
+    {
+        cout << RED << "\nWallet not found!\n" << RESET;
+        interactiveWait(2);
         return;
     }
 
-    cout << CIANO NEGRITO << "\n------------------------------------------------\n";
-    cout << "  Movimentacoes e Moedas: " << carteira->getTitular() << "\n";
+    cout << CYAN << BOLD << "\n------------------------------------------------\n";
+    cout << "  Transactions and Coins: " << wallet->getHolder() << "\n";
     cout << "------------------------------------------------\n\n" << RESET;
 
-    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
+    auto transactions = transactionDAO->findByWalletId(walletId);
     
-    vector<unique_ptr<Movimentacao>> compras;
-    vector<unique_ptr<Movimentacao>> vendas;
+    vector<unique_ptr<Transaction>> purchases;
+    vector<unique_ptr<Transaction>> sales;
     
-    int qntOperacoesCompra = 0;
-    int qntOperacoesVenda = 0;
-    double totalMoedasCompradas = 0;
-    double totalMoedasVendidas = 0;
+    int purchaseOpsCount = 0;
+    int saleOpsCount = 0;
+    double totalCoinsPurchased = 0;
+    double totalCoinsSold = 0;
 
-    for (auto& mov : movimentacoes) {
-        if (mov->getTipoOperacao() == "C") {
-            totalMoedasCompradas += mov->getQuantidade();
-            qntOperacoesCompra++;
-            compras.push_back(make_unique<Movimentacao>(*mov));
-        } else { // "V"
-            totalMoedasVendidas += mov->getQuantidade();
-            qntOperacoesVenda++;
-            vendas.push_back(make_unique<Movimentacao>(*mov));
+    for (auto& mov : transactions)
+    {
+        if (mov->getOperationType() == "C")
+        {
+            totalCoinsPurchased += mov->getQuantity();
+            purchaseOpsCount++;
+            purchases.push_back(make_unique<Transaction>(*mov));
+        }
+        else
+        { 
+            totalCoinsSold += mov->getQuantity();
+            saleOpsCount++;
+            sales.push_back(make_unique<Transaction>(*mov));
         }
     }
 
-    cout << CIANO << "\n--- Movimentacoes Compra ---\n" << RESET;
-    if (compras.empty()) {
-        cout << AMARELO << "Nenhuma operacao de compra registrada." << RESET << endl;
-    } else {
-        printMovimentacoes(compras);
+    cout << CYAN << "\n--- Purchase Transactions ---\n" << RESET;
+    if (purchases.empty())
+    {
+        cout << YELLOW << "No purchase operations registered." << RESET << endl;
+    }
+    else
+    {
+        printTransactions(purchases);
     }
 
-    cout << CIANO << "\n--- Movimentacoes Venda ---\n" << RESET;
-    if (vendas.empty()) {
-        cout << AMARELO << "Nenhuma operacao de venda registrada." << RESET << endl;
-    } else {
-        printMovimentacoes(vendas);
+    cout << CYAN << "\n--- Sale Transactions ---\n" << RESET;
+    if (sales.empty())
+    {
+        cout << YELLOW << "No sale operations registered." << RESET << endl;
+    }
+    else
+    {
+        printTransactions(sales);
     }
     
-    double saldoAtualMoedas = getCarteiraQuantidadeMoedas(carteiraId);
+    double currentCoinBalance = getWalletCoinQuantity(walletId);
 
-    cout << CIANO << "\n--- Resumo de Moedas ---\n" << RESET;
+    cout << CYAN << "\n--- Coin Summary ---\n" << RESET;
     stringstream ss;
     
-    ss << AMARELO << "\nTotal de Moedas Compradas: " << RESET << fixed << setprecision(8) << totalMoedasCompradas;
+    ss << YELLOW << "\nTotal Coins Purchased: " << RESET << fixed << setprecision(8) << totalCoinsPurchased;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "Quantidade de Operacoes de Compra: " << RESET << VERDE << qntOperacoesCompra << RESET;
+    ss << YELLOW << "Number of Purchase Operations: " << RESET << GREEN << purchaseOpsCount << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "\nTotal de Moedas Vendidas: " << RESET << fixed << setprecision(8) << totalMoedasVendidas;
+    ss << YELLOW << "\nTotal Coins Sold: " << RESET << fixed << setprecision(8) << totalCoinsSold;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "Quantidade de Operacoes de Venda: " << RESET << VERDE << qntOperacoesVenda << RESET;
+    ss << YELLOW << "Number of Sale Operations: " << RESET << GREEN << saleOpsCount << RESET;
     printSlowly(ss.str());
     
     printSlowly("\n");
 
     ss.str("");
-    ss << AMARELO << "Saldo Atual de Moedas: " << RESET << fixed << setprecision(8) << saldoAtualMoedas;
+    ss << YELLOW << "Current Coin Balance: " << RESET << fixed << setprecision(8) << currentCoinBalance;
     printSlowly(ss.str());
 
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
-void Controller::reportCarteira()
+void Controller::reportWallet()
 {
-    int carteiraId = getValidatedInput<int>("\nDigite o ID da carteira: ");
+    int walletId = getValidatedInput<int>("\nEnter the wallet ID: ");
 
-    auto carteira = _carteiraDAO->findById(carteiraId);
-    if (!carteira)
+    auto wallet = walletDAO->findById(walletId);
+    if (!wallet)
     {
-        cout << VERMELHO << "\nCarteira nao encontrada!\n" << RESET;
+        cout << RED << "\nWallet not found!\n" << RESET;
+        interactiveWait(2);
         return;
     }
 
-    cout << CIANO NEGRITO << "\n------------------------------------------------\n";
-    cout << "      Relatorio da Carteira " << carteira->getTitular() << "\n";
+    cout << CYAN << BOLD << "\n------------------------------------------------\n";
+    cout << "      Wallet Report: " << wallet->getHolder() << "\n";
     cout << "------------------------------------------------\n\n" << RESET;
 
-    double quantidadeMoedas = getCarteiraQuantidadeMoedas(carteiraId);
-    auto fluxoDetalhado = getCarteiraFluxoCaixaDetalhado(carteiraId);
-    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
+    double coinQuantity = getWalletCoinQuantity(walletId);
+    auto cashFlowDetails = getWalletCashFlowDetails(walletId);
+    auto transactions = transactionDAO->findByWalletId(walletId);
 
-    double patrimonioMoedas = 0;
-    if (!movimentacoes.empty()) {
-        auto it_max = max_element(movimentacoes.cbegin(), movimentacoes.cend(),
-            [](const unique_ptr<Movimentacao>& a, const unique_ptr<Movimentacao>& b) {
-                return a->getData() < b->getData();
+    double coinAssets = 0;
+    if (!transactions.empty())
+    {
+        auto it_max = max_element(transactions.cbegin(), transactions.cend(),
+            [](const unique_ptr<Transaction>& a, const unique_ptr<Transaction>& b) {
+                return a->getDate() < b->getDate();
             });
-        string dataUltimaMov = (*it_max)->getData();
-        patrimonioMoedas = quantidadeMoedas * getCotacao(dataUltimaMov);
+        string lastTransactionDate = (*it_max)->getDate();
+        coinAssets = coinQuantity * getQuote(lastTransactionDate);
     }
 
-    double resultadoTotal = patrimonioMoedas + fluxoDetalhado.fluxoLiquido;
+    double totalResult = coinAssets + cashFlowDetails.netFlow;
 
     stringstream ss;
-    ss << AMARELO << "Saldo de Moedas: " << RESET << fixed << setprecision(8) << quantidadeMoedas;
+    ss << YELLOW << "Coin Balance: " << RESET << fixed << setprecision(8) << coinQuantity;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "Total Gasto em Compras (R$): " << RESET << VERMELHO << fixed << setprecision(2) << fluxoDetalhado.totalCompras << RESET;
+    ss << YELLOW << "Total Spent on Purchases (R$): " << RESET << RED << fixed << setprecision(2) << cashFlowDetails.totalPurchases << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "Total Recebido em Vendas (R$): " << RESET << VERDE << fixed << setprecision(2) << fluxoDetalhado.totalVendas << RESET;
+    ss << YELLOW << "Total Received from Sales (R$): " << RESET << GREEN << fixed << setprecision(2) << cashFlowDetails.totalSales << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "\nBalanço Financeiro (R$): " << RESET;
-    if (fluxoDetalhado.fluxoLiquido >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << fixed << setprecision(2) << fluxoDetalhado.fluxoLiquido << RESET;
+    ss << YELLOW << "\nNet Financial Balance (R$): " << RESET;
+    if (cashFlowDetails.netFlow >= 0) ss << GREEN; else ss << RED;
+    ss << fixed << setprecision(2) << cashFlowDetails.netFlow << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO << "Patrimônio em Moedas (R$): " << RESET;
-    if (patrimonioMoedas >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << fixed << setprecision(2) << patrimonioMoedas << RESET;
+    ss << YELLOW << "Coin Assets (R$): " << RESET;
+    if (coinAssets >= 0) ss << GREEN; else ss << RED;
+    ss << fixed << setprecision(2) << coinAssets << RESET;
     printSlowly(ss.str());
 
     ss.str("");
-    ss << AMARELO NEGRITO << "\nResultado Total (Ganhos/Perdas) (R$): " << RESET;
-    if (resultadoTotal >= 0) ss << VERDE; else ss << VERMELHO;
-    ss << fixed << setprecision(2) << resultadoTotal << RESET;
+    ss << YELLOW << BOLD << "\nTotal Result (Gains/Losses) (R$): " << RESET;
+    if (totalResult >= 0) ss << GREEN; else ss << RED;
+    ss << fixed << setprecision(2) << totalResult << RESET;
     printSlowly(ss.str());
 
-    if (movimentacoes.empty())
+    if (transactions.empty())
     {
-        cout << AMARELO << "\nNenhuma movimentacao registrada para esta carteira." << RESET << endl;
+        cout << YELLOW << "\nNo transactions registered for this wallet." << RESET << endl;
     }
     else
     {
-        cout << CIANO << "\n--- Historico de Movimentacoes ---\n" << RESET;
-    printMovimentacoes(movimentacoes);
+        cout << CYAN << "\n--- Transaction History ---\n" << RESET;
+    printTransactions(transactions);
     }
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
 void Controller::showSystemHelp()
 {
-    cout << CIANO NEGRITO << "\n--- AJUDA DO SISTEMA FT COIN ---\n\n" << RESET;
+    cout << CYAN << BOLD << "\n--- FT COIN SYSTEM HELP ---\n\n" << RESET;
     
     auto printBlock = [this](const vector<string>& block) {
         for(const auto& line : block) {
@@ -718,41 +787,41 @@ void Controller::showSystemHelp()
         }
     };
 
-    vector<string> menu_principal_text = {
-        string(AMARELO) + "MENU PRINCIPAL:" + RESET,
-        "1. Gerenciar Carteiras - Crie, edite, exclua e liste suas carteiras de moedas.",
-        "2. Compra & Venda de Moedas - Registre suas operacoes de compra e venda.",
-        "3. Relatorios - Gere relatorios globais, por carteira ou sobre as cotacoes.",
-        "4. Ajuda - Exibe este menu de ajuda e os creditos do sistema.",
-        "5. Sair - Encerra o programa."
+    vector<string> main_menu_text = {
+        string(YELLOW) + "MAIN MENU:" + RESET,
+        "1. Manage Wallets - Create, edit, delete, and list your coin wallets.",
+        "2. Buy & Sell Coins - Register your purchase and sale operations.",
+        "3. Reports - Generate global reports, by wallet, or about quotes.",
+        "4. Help - Displays this help menu and system credits.",
+        "5. Exit - Closes the program."
     };
-    printBlock(menu_principal_text);
-    esperar(1);
+    printBlock(main_menu_text);
+    wait(1);
 
-    vector<string> funcionalidades_text = {
-        string(AMARELO) + "\nFUNCIONALIDADES:" + RESET,
-        "- Os relatorios de carteira permitem uma analise detalhada de ganhos, perdas e movimentacoes.",
-        "- O oraculo de cotacao busca e armazena os valores da moeda para garantir consistencia nos calculos."
+    vector<string> features_text = {
+        string(YELLOW) + "\nFEATURES:" + RESET,
+        "- Wallet reports allow for a detailed analysis of gains, losses, and transactions.",
+        "- The quote oracle fetches and stores coin values to ensure consistency in calculations."
     };
-    printBlock(funcionalidades_text);
-    esperar(1);
+    printBlock(features_text);
+    wait(1);
 
-    vector<string> comandos_text = {
-        string(AMARELO) + "\nCOMANDOS:" + RESET,
-        "- Utilize os numeros correspondentes para navegar pelos menus.",
-        "- Siga as instrucoes exibidas em cada tela para inserir dados.",
-        "- Datas devem ser inseridas no formato DD-MM-AAAA."
+    vector<string> commands_text = {
+        string(YELLOW) + "\nCOMMANDS:" + RESET,
+        "- Use the corresponding numbers to navigate through the menus.",
+        "- Follow the instructions displayed on each screen to enter data.",
+        "- Dates must be entered in the DD-MM-YYYY format."
     };
-    printBlock(comandos_text);
-    esperar(1);
+    printBlock(commands_text);
+    wait(1);
     
-    vector<string> mais_info_text = {
-        string(AMARELO) + "\nPARA MAIS INFORMACOES:" + RESET,
-        "Consulte a documentacao do projeto ou entre em contato com a equipe de desenvolvimento."
+    vector<string> more_info_text = {
+        string(YELLOW) + "\nFOR MORE INFORMATION:" + RESET,
+        "Consult the project documentation or contact the development team."
     };
-    printBlock(mais_info_text);
+    printBlock(more_info_text);
 
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
 void Controller::showCredits()
@@ -763,12 +832,10 @@ void Controller::showCredits()
         " | |    | |__) | |__  | |  | || |    | | | (___  ",
         " | |    |  _  /|  __| | |  | || |    | |  \\___ \\ ",
         " | |____| | \\ \\| |____| |__| || |_   | |  ____) |",
-        "  \\_____|_|  \\_\\______|_____/_____|  |_| |_____/ ",
-        "                                                 ",
-        "                                                 "
+        "  \\_____|_|  \\_\\______|_____/_____|  |_| |_____/ \n",
     };
 
-    cout << CIANO NEGRITO;
+    cout << CYAN << BOLD;
     for(const auto& line : credits_art) {
         printSlowly(line, 8);
     }
@@ -781,190 +848,213 @@ void Controller::showCredits()
     };
 
     vector<string> info_text = {
-        "\nSISTEMA FT COIN",
-        "Versao: 1.0.0",
-        "Data de Lancamento: Julho de 2025"
+        "\nFT COIN SYSTEM",
+        "Version: 1.1.0",
+        "Release Date: July 2025"
     };
     printBlock(info_text);
-    esperar(1);
+    wait(1);
 
     vector<string> dev_text = {
-        string(AMARELO) + "\nDESENVOLVIDO POR:" + RESET,
+        string(YELLOW) + "\nDEVELOPED BY:" + RESET,
         "Gustavo Soares Almeida\nHans William Hamann\nMarcelo Dos Santos Da Boa Morte\nNicolas Lourenço Mafei\nRenan Felipe Rodrigues"
     };
     printBlock(dev_text);
-    esperar(1);
+    wait(1);
 
     vector<string> rights_text = {
-        string(AMARELO) + "\nDIREITOS:" + RESET,
-        "© 2025 FT-Coin. Todos os direitos reservados."
+        string(YELLOW) + "\nRIGHTS:" + RESET,
+        "© 2025 FT-Coin. All rights reserved."
     };
     printBlock(rights_text);
-    esperar(1);
+    wait(1);
 
     vector<string> uni_text = {
-        "\nUNICAMP - Universidade Estadual de Campinas",
-        "Disciplina: SI300 - Programação Orientada a Objetos I",
-        "2º Semestre de 2025"
+        "\nUNICAMP - University of Campinas",
+        "Course: SI300 - Object-Oriented Programming I",
+        "2nd Semester of 2025"
     };
     printBlock(uni_text);
 
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
-void Controller::esperar(int seconds)
+void Controller::wait(int seconds)
 {
-    sleep(seconds);
+    this_thread::sleep_for(chrono::seconds(seconds));
 }
 
-void Controller::esperarInterativo(int seconds)
+void Controller::interactiveWait(int seconds)
 {
-    // Salva as configurações atuais do terminal
+    // Manipulates terminal settings for non-blocking input to allow skipping wait time.
     struct termios oldt, newt;
     int oldf;
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
 
-    // Desativa o modo canônico e o eco para ler as teclas imediatamente
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
     oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
 
-    cout << CIANO << "\n\nPressione ENTER para pular ou aguarde o retorno ao menu... " << RESET << endl;
+    cout << CYAN << "\n\nPress ENTER to skip or wait to return to the menu... " << RESET << endl;
 
-    for (int i = seconds; i > 0; --i) {
-        cout << CIANO << "Retornando em " << i << "s..." << flush;
+    for (int i = seconds; i > 0; --i)
+    {
+        cout << CYAN << "Returning in " << i << "s..." << flush;
         
-        // Pausa por 1 segundo
         this_thread::sleep_for(chrono::seconds(1));
 
-        // Verifica se 'Enter' foi pressionado
         char ch = getchar();
-        if (ch == '\n') {
+        if (ch == '\n')
+        {
             break;
         }
-        cout << "\r"; // Move o cursor para o início da linha
+        cout << "\r"; 
     }
 
-    // Restaura as configurações originais do terminal
     tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
     fcntl(STDIN_FILENO, F_SETFL, oldf);
-    cout << "\r                                                     \r" << flush; // Limpa a linha
+    cout << "\r                                                     \r" << flush; 
 }
 
 void Controller::printSlowly(const string& text, int delay_ms)
 {
-    for (const char c : text) {
+    for (const char c : text)
+    {
         cout << c << flush;
         this_thread::sleep_for(chrono::milliseconds(delay_ms));
     }
     cout << endl;
 }
 
-void Controller::actionRelatorioOraculo()
+void Controller::oracleReportActions()
 {
-    vector<string> menuItens = {
-        "Listar Historico Cotacao",
-        "Listar Cotacao por Data Especifica",
-        "Relatorio Geral de Cotacao",
-        "Voltar"};
+    vector<string> menuItems = {
+        "List Quote History",
+        "List Quote by Specific Date",
+        "General Quote Report",
+        "Back"};
     vector<void (Controller::*)()> functions = {
-        &Controller::listarHistoricoCotacao,
-        &Controller::listarCotacaoPorData,
-        &Controller::relatorioGeralCotacao
+        &Controller::listQuotesHistory,
+        &Controller::listQuoteByDate,
+        &Controller::generalQuoteReport
         };
-    launchActions("Relatorio de Cotacao do Oraculo", menuItens, functions);
+    launchActions("Oracle Quote Report", menuItems, functions);
 }
 
-void Controller::listarHistoricoCotacao()
+void Controller::listQuotesHistory()
 {
-    if (_type == DataBaseSelector::DATABASE) {
-        try {
-            unique_ptr<sql::Statement> stmnt(_dbConnection->getConnection()->createStatement());
-            sql::ResultSet* res = stmnt->executeQuery("SELECT DATE_FORMAT(Data, '%d-%m-%Y') as DataFormatada, Cotacao FROM ORACULO ORDER BY Data ASC");
+    if (type == DataBaseSelector::DATABASE)
+    {
+        try
+        {
+            unique_ptr<sql::Statement> stmnt(dbConnection->getConnection()->createStatement());
+            sql::ResultSet* res = stmnt->executeQuery("SELECT DATE_FORMAT(Data, '%d-%m-%Y') as FormattedDate, Cotacao FROM ORACULO ORDER BY Data ASC");
             
-            cout << CIANO NEGRITO << "\n--- Historico de Cotacoes do Oraculo (BD) ---\n" << RESET;
+            cout << CYAN << BOLD << "\n--- Oracle Quote History (DB) ---\n" << RESET;
             cout << "---------------------------------------\n";
-            cout << left << setw(15) << "Data" << "Cotacao (R$)" << endl;
+            cout << left << setw(15) << "Date" << "Quote (R$)" << endl;
             cout << "---------------------------------------\n";
             
-            while (res->next()) {
-                cout << left << setw(15) << res->getString("DataFormatada") << fixed << setprecision(2) << res->getDouble("Cotacao") << endl;
+            while (res->next())
+            {
+                cout << left << setw(15) << res->getString("FormattedDate") << fixed << setprecision(2) << res->getDouble("Cotacao") << endl;
             }
             cout << "---------------------------------------\n";
             delete res;
-        } catch (sql::SQLException& e) {
-            cerr << VERMELHO << "Erro ao consultar o banco de dados: " << e.what() << RESET << endl;
         }
-    } else { // MEMORY
-        if (_oracle_mem.empty()) {
-            cout << AMARELO << "\nNenhuma cotacao registrada no oraculo." << RESET << endl;
-            esperarInterativo(3);
+        catch (sql::SQLException& e)
+        {
+            cerr << RED << "Error querying the database: " << e.what() << RESET << endl;
+        }
+    }
+    else
+    { // MEMORY
+        if (oracleMem.empty())
+        {
+            cout << YELLOW << "\nNo quotes registered in the oracle." << RESET << endl;
+            interactiveWait(3);
             return;
         }
 
-        vector<pair<string, double>> cotacoes(_oracle_mem.begin(), _oracle_mem.end());
-        sort(cotacoes.begin(), cotacoes.end(), [](const pair<string, double>& a, const pair<string, double>& b) {
-            string dataA = a.first.substr(6, 4) + a.first.substr(3, 2) + a.first.substr(0, 2);
-            string dataB = b.first.substr(6, 4) + b.first.substr(3, 2) + b.first.substr(0, 2);
-            return dataA < dataB;
+        vector<pair<string, double>> quotes;
+        for(const auto& p : oracleMem)
+        {
+            quotes.push_back(p);
+        }
+
+        sort(quotes.begin(), quotes.end(), [](const pair<string, double>& a, const pair<string, double>& b) {
+            return a.first < b.first; // Dates are YYYY-MM-DD, so direct comparison works
         });
 
-        cout << CIANO NEGRITO << "\n--- Historico de Cotacoes do Oraculo (Memoria) ---\n" << RESET;
+        cout << CYAN << BOLD << "\n--- Oracle Quote History (Memory) ---\n" << RESET;
         cout << "---------------------------------------\n";
-        cout << left << setw(15) << "Data" << "Cotacao (R$)" << endl;
+        cout << left << setw(15) << "Date" << "Quote (R$)" << endl;
         cout << "---------------------------------------\n";
         
-        for (const auto& cotacao : cotacoes) {
-            cout << left << setw(15) << cotacao.first << fixed << setprecision(2) << cotacao.second << endl;
+        for (const auto& quote : quotes)
+        {
+            string date_db = quote.first; // YYYY-MM-DD
+            string date_display = date_db.substr(8, 2) + "-" + date_db.substr(5, 2) + "-" + date_db.substr(0, 4);
+            cout << left << setw(15) << date_display << fixed << setprecision(2) << quote.second << endl;
         }
         cout << "---------------------------------------\n";
     }
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
-void Controller::relatorioGeralCotacao()
+void Controller::generalQuoteReport()
 {
-    if (_type == DataBaseSelector::DATABASE) {
-        try {
-            unique_ptr<sql::Statement> stmnt(_dbConnection->getConnection()->createStatement());
+    if (type == DataBaseSelector::DATABASE)
+    {
+        try
+        {
+            unique_ptr<sql::Statement> stmnt(dbConnection->getConnection()->createStatement());
             sql::ResultSet* res = stmnt->executeQuery(
                 "SELECT "
-                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as maxVal, "
-                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as maxDate, "
-                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as minVal, "
-                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as minDate, "
-                "AVG(Cotacao) as media FROM ORACULO"
+                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as MaxValue, "
+                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as MaxDate, "
+                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as MinValue, "
+                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as MinDate, "
+                "AVG(Cotacao) as Average FROM ORACULO"
             );
 
-            if (res->next()) {
-                cout << CIANO NEGRITO << "\n--- Relatorio Geral de Cotacoes (BD) ---\n\n" << RESET;
+            if (res->next())
+            {
+                cout << CYAN << BOLD << "\n--- General Quote Report (DB) ---\n\n" << RESET;
                 stringstream ss;
 
-                ss << AMARELO << "Cotacao Maxima: " << RESET << VERDE << fixed << setprecision(2) << res->getDouble("maxVal") << " (em " << res->getString("maxDate") << ")" << RESET;
+                ss << YELLOW << "Max Quote: " << RESET << GREEN << fixed << setprecision(2) << res->getDouble("MaxValue") << " (on " << res->getString("MaxDate") << ")" << RESET;
                 printSlowly(ss.str());
 
                 ss.str("");
-                ss << AMARELO << "Cotacao Minima: " << RESET << VERMELHO << fixed << setprecision(2) << res->getDouble("minVal") << " (em " << res->getString("minDate") << ")" << RESET;
+                ss << YELLOW << "Min Quote: " << RESET << RED << fixed << setprecision(2) << res->getDouble("MinValue") << " (on " << res->getString("MinDate") << ")" << RESET;
                 printSlowly(ss.str());
 
                 ss.str("");
-                ss << AMARELO << "Cotacao Media:  " << RESET << fixed << setprecision(2) << res->getDouble("media");
+                ss << YELLOW << "Average Quote:  " << RESET << fixed << setprecision(2) << res->getDouble("Average");
                 printSlowly(ss.str());
-            } else {
-                 cout << AMARELO << "\nNenhuma cotacao registrada no oraculo." << RESET << endl;
+            }
+            else
+            {
+                 cout << YELLOW << "\nNo quotes registered in the oracle." << RESET << endl;
             }
             delete res;
 
-        } catch (sql::SQLException& e) {
-            cerr << VERMELHO << "Erro ao consultar o banco de dados: " << e.what() << RESET << endl;
+        }
+        catch (sql::SQLException& e)
+        {
+            cerr << RED << "Error querying the database: " << e.what() << RESET << endl;
         }
 
-    } else { // MEMORY
-        if (_oracle_mem.empty()) {
-            cout << AMARELO << "\nNenhuma cotacao registrada no oraculo." << RESET << endl;
-            esperarInterativo(3);
+    }
+    else
+    { // MEMORY
+        if (oracleMem.empty())
+        {
+            cout << YELLOW << "\nNo quotes registered in the oracle." << RESET << endl;
+            interactiveWait(3);
             return;
         }
 
@@ -974,74 +1064,91 @@ void Controller::relatorioGeralCotacao()
         string minDate;
         double sum = 0.0;
 
-        for (const auto& par : _oracle_mem) {
-            if (par.second > maxVal) {
-                maxVal = par.second;
-                maxDate = par.first;
+        for (const auto& pair : oracleMem)
+        {
+            if (pair.second > maxVal)
+            {
+                maxVal = pair.second;
+                maxDate = pair.first;
             }
-            if (par.second < minVal) {
-                minVal = par.second;
-                minDate = par.first;
+            if (pair.second < minVal)
+            {
+                minVal = pair.second;
+                minDate = pair.first;
             }
-            sum += par.second;
+            sum += pair.second;
         }
 
-        double media = sum / _oracle_mem.size();
+        double average = sum / oracleMem.size();
 
-        cout << CIANO NEGRITO << "\n--- Relatorio Geral de Cotacoes (Memoria) ---\n\n" << RESET;
+        string maxDate_display = maxDate.substr(8, 2) + "-" + maxDate.substr(5, 2) + "-" + maxDate.substr(0, 4);
+        string minDate_display = minDate.substr(8, 2) + "-" + minDate.substr(5, 2) + "-" + minDate.substr(0, 4);
+
+        cout << CYAN << BOLD << "\n--- General Quote Report (Memory) ---\n\n" << RESET;
         stringstream ss;
 
-        ss << AMARELO << "Cotacao Maxima: " << RESET << VERDE << fixed << setprecision(2) << maxVal << " (em " << maxDate << ")" << RESET;
+        ss << YELLOW << "Max Quote: " << RESET << GREEN << fixed << setprecision(2) << maxVal << " (on " << maxDate_display << ")" << RESET;
         printSlowly(ss.str());
 
         ss.str("");
-        ss << AMARELO << "Cotacao Minima: " << RESET << VERMELHO << fixed << setprecision(2) << minVal << " (em " << minDate << ")" << RESET;
+        ss << YELLOW << "Min Quote: " << RESET << RED << fixed << setprecision(2) << minVal << " (on " << minDate_display << ")" << RESET;
         printSlowly(ss.str());
 
         ss.str("");
-        ss << AMARELO << "Cotacao Media:  " << RESET << fixed << setprecision(2) << media;
+        ss << YELLOW << "Average Quote:  " << RESET << fixed << setprecision(2) << average;
         printSlowly(ss.str());
     }
-    esperarInterativo(5);
+    interactiveWait(5);
 }
 
-void Controller::listarCotacaoPorData()
+void Controller::listQuoteByDate()
 {
-    string data = getValidatedDate("Digite a data para a consulta (DD-MM-AAAA): ");
+    string date_db = getValidatedDate("Enter the date for the query (DD-MM-YYYY): ");
     
-    // A função getCotacao já lida com BD e memória, então não precisa de lógica dupla aqui.
-    // Ela já insere no _oracle_mem se não encontrar, e também no BD se for o caso.
-    double cotacao = getCotacao(data);
+    double quote = getQuote(date_db);
+
+    string date_display = date_db.substr(8,2) + "-" + date_db.substr(5,2) + "-" + date_db.substr(0,4);
 
     cout << "\n";
     stringstream ss;
-    ss << AMARELO << "Cotacao para a data " << RESET << data << AMARELO << " e de: " << RESET << VERDE << "R$ " << fixed << setprecision(2) << cotacao << RESET;
+    ss << YELLOW << "The quote for the date " << RESET << date_display << YELLOW << " is: " << RESET << GREEN << "R$ " << fixed << setprecision(2) << quote << RESET;
     printSlowly(ss.str());
-    esperarInterativo(3);
+    interactiveWait(3);
 }
 
-void Controller::printMovimentacoes(const vector<unique_ptr<Movimentacao>>& movimentacoes)
+void Controller::printTransactions(const vector<unique_ptr<Transaction>>& transactions)
 {
     cout << "\n----------------------------------------------------------------------------------\n";
-    cout << left << setw(5) << "ID" << setw(15) << "ID Carteira" << setw(20) << "Tipo" << setw(25) << "Data" << "Quantidade" << endl;
+    cout << left << setw(5) << "ID" << setw(15) << "Wallet ID" << setw(20) << "Type" << setw(25) << "Date" << "Quantity" << endl;
     cout << "----------------------------------------------------------------------------------\n";
 
-    if (movimentacoes.empty()) {
-        cout << "Nenhuma movimentacao encontrada.\n";
-    } else {
+    if (transactions.empty())
+    {
+        cout << "No transactions found.\n";
+    }
+    else
+    {
         stringstream ss;
-        for (const auto& mov : movimentacoes) {
-            ss.str(""); // Limpa o stream
+        for (const auto& mov : transactions)
+        {
+            ss.str(""); 
             
-            string tipo_str;
-            if (mov->getTipoOperacao() == "C") {
-                tipo_str = VERDE + string("Compra") + RESET;
-            } else {
-                tipo_str = VERMELHO + string("Venda") + RESET;
+            string type_str;
+            if (mov->getOperationType() == "C")
+            {
+                type_str = GREEN + string("Purchase") + RESET;
+            }
+            else
+            {
+                type_str = RED + string("Sale") + RESET;
             }
 
-            ss << left << setw(5) << mov->getId() << setw(15) << mov->getCarteiraId() << setw(20) << tipo_str
-               << setw(25) << mov->getData() << fixed << setprecision(8) << mov->getQuantidade();
+            // Displays date in DD-MM-YYYY format for readability.
+            string date_db = mov->getDate(); 
+            string date_display = date_db.substr(8, 2) + "-" + date_db.substr(5, 2) + "-" + date_db.substr(0, 4);
+
+            ss << left << setw(5) << mov->getId() << setw(15) << mov->getWalletId() << setw(20) << type_str
+               << setw(25) << date_display << fixed << setprecision(8) << mov->getQuantity();
             printSlowly(ss.str(), 5);
         }
     }
@@ -1049,11 +1156,21 @@ void Controller::printMovimentacoes(const vector<unique_ptr<Movimentacao>>& movi
 }
 
 template<typename T>
-T Controller::getValidatedInput(const string& prompt) {
+T Controller::getValidatedInput(const string& prompt)
+{
     T value;
     cout << prompt;
-    while (!(cin >> value)) {
-        cout << VERMELHO << "\nEntrada inválida. Por favor, digite um valor numérico." << RESET << endl;
+    
+    // Special handling for string to allow reading inputs with spaces.
+    if constexpr (is_same_v<T, string>)
+    {
+        getline(cin >> ws, value);
+        return value;
+    }
+
+    while (!(cin >> value))
+    {
+        cout << RED << "\nInvalid input. Please enter a numeric value." << RESET << endl;
         cin.clear();
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
         cout << prompt;
@@ -1064,186 +1181,216 @@ T Controller::getValidatedInput(const string& prompt) {
 
 bool Controller::isValidDate(int d, int m, int y)
 {
-    if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) {
+    if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31)
+    {
         return false;
     }
 
-    if (m == 2) {
+    if (m == 2)
+    {
         bool isLeap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
-        if (isLeap) {
+        if (isLeap)
+        {
             return d <= 29;
-        } else {
+        }
+        else
+        {
             return d <= 28;
         }
     }
 
-    if (m == 4 || m == 6 || m == 9 || m == 11) {
+    if (m == 4 || m == 6 || m == 9 || m == 11)
+    {
         return d <= 30;
     }
 
     return true;
 }
 
-string Controller::getValidatedDate(const string& prompt) {
+string Controller::getValidatedDate(const string& prompt)
+{
     string date_str;
     regex date_regex(R"(^(\d{2})-(\d{2})-(\d{4})$)");
     smatch matches;
 
-    while (true) {
+    while (true)
+    {
         cout << prompt;
         getline(cin, date_str);
-        if (regex_match(date_str, matches, date_regex)) {
+        if (regex_match(date_str, matches, date_regex))
+        {
             int d = stoi(matches[1].str());
             int m = stoi(matches[2].str());
             int y = stoi(matches[3].str());
 
-            if (isValidDate(d, m, y)) {
+            if (isValidDate(d, m, y))
+            {
+                // Returns date in YYYY-MM-DD for internal consistency.
                 return matches[3].str() + "-" + matches[2].str() + "-" + matches[1].str();
-            } else {
-                cout << VERMELHO << "Data invalida. O dia ou mes estao fora do intervalo para o ano." << RESET << endl;
             }
-        } else {
-            cout << VERMELHO << "Formato de data invalido. Use DD-MM-AAAA. Por favor, tente novamente." << RESET << endl;
+            else
+            {
+                cout << RED << "Invalid date. The day or month is out of range for the year." << RESET << endl;
+            }
+        }
+        else
+        {
+            cout << RED << "Invalid date format. Use DD-MM-YYYY. Please try again." << RESET << endl;
         }
     }
 }
 
 template int Controller::getValidatedInput<int>(const string& prompt);
 template double Controller::getValidatedInput<double>(const string& prompt);
+template string Controller::getValidatedInput<string>(const string& prompt);
 
-void Controller::listAll()
+void Controller::listAllWallets()
 {
-    auto carteiras = _carteiraDAO->findAll();
-    if (carteiras.empty())
+    auto wallets = walletDAO->findAll();
+    if (wallets.empty())
     {
-        cout << "\nNenhuma carteira encontrada.\n";
+        cout << "\nNo wallets found.\n";
         return;
     }
-    cout << "\n--- Lista de Carteiras ---\n";
+    cout << "\n--- Wallet List ---\n";
     cout << "--------------------------------------------------\n";
-    cout << left << setw(5) << "ID" << setw(25) << "Titular" << "Corretora" << endl;
+    cout << left << setw(5) << "ID" << setw(25) << "Holder" << "Broker" << endl;
     cout << "--------------------------------------------------\n";
     
     stringstream ss;
-    for (const auto& carteira : carteiras)
+    for (const auto& wallet : wallets)
     {
         ss.str("");
-        ss << left << setw(5) << carteira->getId() << setw(25) << carteira->getTitular() << carteira->getCorretora();
+        ss << left << setw(5) << wallet->getId() << setw(25) << wallet->getHolder() << wallet->getBroker();
         printSlowly(ss.str(), 5);
     }
     cout << "--------------------------------------------------\n";
 }
 
-void Controller::findByNome() {
-    cout << "Digite o nome do titular a ser buscado: ";
-    string nome;
-    getline(cin >> ws, nome);
-
-    auto carteira = _carteiraDAO->findByTitular(nome);
-    if (carteira) {
-        cout << "\nCarteira encontrada:\n";
-        cout << *carteira << endl;
-    } else {
-        cout << "\nCarteira nao encontrada.\n";
-    }
-}
-
-double Controller::getCarteiraQuantidadeMoedas(int carteiraId)
+void Controller::findByHolder()
 {
-    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
-    double quantidade = 0;
-    for (const auto& mov : movimentacoes) {
-        if (mov->getTipoOperacao() == "C") {
-            quantidade += mov->getQuantidade();
-        } else {
-            quantidade -= mov->getQuantidade();
-        }
-    }
-    return quantidade;
-}
+    string name = getValidatedInput<string>("Enter the holder name to search for: ");
 
-CarteiraFluxoCaixaDetalhado Controller::getCarteiraFluxoCaixaDetalhado(int carteiraId)
-{
-    auto movimentacoes = _movimentacaoDAO->findByCarteiraId(carteiraId);
-    double totalCompras = 0;
-    double totalVendas = 0;
-    for (const auto& mov : movimentacoes) {
-        double valorOperacao = getCotacao(mov->getData()) * mov->getQuantidade();
-        if (mov->getTipoOperacao() == "C") {
-            totalCompras += valorOperacao;
-        } else {
-            totalVendas += valorOperacao;
-        }
-    }
-    return {totalCompras, totalVendas, totalVendas - totalCompras};
-}
-
-void Controller::createCotacao(const string& data, double cotacao)
-{
-    if (_type == DataBaseSelector::MEMORY)
+    auto wallet = walletDAO->findByHolder(name);
+    if (wallet)
     {
-        _oracle_mem[data] = cotacao;
+        cout << "\nWallet found:\n";
+        cout << "ID: " << wallet->getId() << ", Holder: " << wallet->getHolder() << ", Broker: " << wallet->getBroker() << endl;
+    }
+    else
+    {
+        cout << RED << "\nWallet not found.\n" << RESET;
+    }
+    interactiveWait(3);
+}
+
+double Controller::getWalletCoinQuantity(int walletId)
+{
+    auto transactions = transactionDAO->findByWalletId(walletId);
+    double quantity = 0;
+    for (const auto& mov : transactions)
+    {
+        if (mov->getOperationType() == "C")
+        {
+            quantity += mov->getQuantity();
+        }
+        else
+        {
+            quantity -= mov->getQuantity();
+        }
+    }
+    return quantity;
+}
+
+WalletCashFlowDetails Controller::getWalletCashFlowDetails(int walletId)
+{
+    auto transactions = transactionDAO->findByWalletId(walletId);
+    double totalPurchases = 0;
+    double totalSales = 0;
+    for (const auto& mov : transactions)
+    {
+        double transactionValue = getQuote(mov->getDate()) * mov->getQuantity();
+        if (mov->getOperationType() == "C")
+        {
+            totalPurchases += transactionValue;
+        }
+        else
+        {
+            totalSales += transactionValue;
+        }
+    }
+    return {totalPurchases, totalSales, totalSales - totalPurchases};
+}
+
+void Controller::createQuote(const string& date, double quote)
+{
+    if (type == DataBaseSelector::MEMORY)
+    {
+        oracleMem[date] = quote;
     }
     else
     {
         try
         {
-            unique_ptr<sql::PreparedStatement> pstmt(_dbConnection->getConnection()->prepareStatement("INSERT INTO ORACULO (Data, Cotacao) VALUES (?, ?)"));
-            pstmt->setString(1, data);
-            pstmt->setDouble(2, cotacao);
+            unique_ptr<sql::PreparedStatement> pstmt(dbConnection->getConnection()->prepareStatement("INSERT INTO ORACULO (Data, Cotacao) VALUES (?, ?)"));
+            pstmt->setString(1, date);
+            pstmt->setDouble(2, quote);
             pstmt->executeUpdate();
-            cout << "Nova cotacao de R$" << fixed << setprecision(2) << cotacao << " criada para a data " << data << endl;
+            cout << "New quote of R$" << fixed << setprecision(2) << quote << " created for date " << date.substr(8, 2) + "-" + date.substr(5, 2) + "-" + date.substr(0, 4) << endl;
         }
         catch (sql::SQLException &e)
         {
-            if (e.getErrorCode() != 1062)
-                cerr << "Erro ao criar nova cotacao: " << e.what() << endl;
+            // Ignores duplicate entry errors (code 1062).
+            if (e.getErrorCode() != 1062) 
+                cerr << "Error creating new quote: " << e.what() << endl;
         }
     }
 }
 
-double Controller::getCotacao(const string& data)
+double Controller::getQuote(const string& date)
 {
-    if (_type == DataBaseSelector::MEMORY)
+    if (type == DataBaseSelector::MEMORY)
     {
-        if (_oracle_mem.find(data) == _oracle_mem.end())
+        if (oracleMem.find(date) == oracleMem.end())
         {
-            cerr << AMARELO << "\nAviso (Memoria): Nenhuma cotacao encontrada para a data " << data << ". Criando uma nova." << RESET << endl;
+            // Fallback: If no quote exists, create a random one.
+            cerr << YELLOW << "\nWarning (Memory): No quote found for date " << date << ". Creating a new one." << RESET << endl;
             random_device rd;
             mt19937 gen(rd());
             uniform_real_distribution<> distr(4.50, 5.90);
-            double novaCotacao = distr(gen);
-            _oracle_mem[data] = novaCotacao;
-            return novaCotacao;
+            double newQuote = distr(gen);
+            oracleMem[date] = newQuote;
+            return newQuote;
         }
-        return _oracle_mem[data];
+        return oracleMem[date];
     }
     else
     {
         try
         {
-            unique_ptr<sql::PreparedStatement> pstmt(_dbConnection->getConnection()->prepareStatement("SELECT Cotacao FROM ORACULO WHERE Data = ?"));
-            pstmt->setString(1, data);
+            unique_ptr<sql::PreparedStatement> pstmt(dbConnection->getConnection()->prepareStatement("SELECT Cotacao FROM ORACULO WHERE Data = ?"));
+            pstmt->setString(1, date);
             sql::ResultSet* res = pstmt->executeQuery();
             if (res->next())
             {
-                double cotacao = res->getDouble("Cotacao");
+                double quote = res->getDouble("Cotacao");
                 delete res;
-                return cotacao;
+                return quote;
             }
             delete res;
 
-            cerr << AMARELO << "\nAviso: Nenhuma cotacao encontrada para a data " << data << ". Criando uma nova." << RESET << endl;
+            // Fallback: If no quote exists, create a random one.
+            cerr << YELLOW << "\nWarning: No quote found for date " << date.substr(8, 2) + "-" + date.substr(5, 2) + "-" + date.substr(0, 4) << ". Creating a new one." << RESET << endl;
             random_device rd;
             mt19937 gen(rd());
             uniform_real_distribution<> distr(4.50, 5.90);
-            double novaCotacao = distr(gen);
-            createCotacao(data, novaCotacao);
-            return novaCotacao;
+            double newQuote = distr(gen);
+            createQuote(date, newQuote);
+            return newQuote;
         }
         catch (sql::SQLException &e)
         {
-            cerr << "\nErro ao buscar cotacao: " << e.what() << endl;
+            cerr << "\nError fetching quote: " << e.what() << endl;
             return 5.0;
         }
     }

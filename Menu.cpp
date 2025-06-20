@@ -1,5 +1,6 @@
 #include "Menu.h"
-#include "cores.h"
+#include <iostream>
+#include <limits>
 #include <iomanip>
 
 using namespace std;
@@ -15,28 +16,28 @@ void Menu::setTitle(const string& title) {
 }
 
 void Menu::addOption(const string& option) {
-    options.push_back(option);
+    this->options.push_back(option);
 }
 
 int Menu::getOption() const {
     while (true) {
-        cout << "\n" << CIANO NEGRITO;
+        cout << "\n" << CYAN << BOLD;
         cout << "╔════════════════════════════════════════════════════════════╗\n";
         cout << "║ " << left << setw(58) << title << " ║\n";
         cout << "╚════════════════════════════════════════════════════════════╝\n" << RESET;
         
         for (size_t i = 0; i < options.size(); i++) {
-            cout << "   " << VERDE NEGRITO << (i + 1) << ". " << RESET << options[i] << "\n";
+            cout << "   " << GREEN << BOLD << (i + 1) << ". " << RESET << options[i] << "\n";
         }
-        cout << AMARELO << "\n   Opção: " << RESET;
+        cout << YELLOW << "\n   Option: " << RESET;
 
-        int opcao;
-        while (!(cin >> opcao) || opcao < 1 || opcao > static_cast<int>(options.size())) {
+        int opt;
+        while (!(cin >> opt) || opt < 1 || opt > static_cast<int>(options.size())) {
             cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            cout << VERMELHO << "Opção inválida! Digite um número entre 1 e " << options.size() << ": " << RESET;
+            cout << RED << "Invalid option! Enter a number between 1 and " << options.size() << ": " << RESET;
         }
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        return opcao;
+        return opt;
     }
 } 

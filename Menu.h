@@ -3,12 +3,11 @@
 
 #include <string>
 #include <vector>
-#include <iostream>
-#include <limits>
-#include "cores.h"
+#include "Colors.h"
 
 using namespace std;
 
+// A simple utility for creating and displaying interactive console menus.
 class Menu {
 private:
 	string title;
@@ -17,7 +16,6 @@ private:
 public:
 	Menu();
 	virtual ~Menu();
-
 	void setTitle(const string& title);
 	void addOption(const string& option);
 	int getOption() const;

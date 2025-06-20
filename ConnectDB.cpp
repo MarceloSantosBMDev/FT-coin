@@ -4,30 +4,41 @@
 
 using namespace std;
 
-ConnectDB::ConnectDB() {
-    try {
-        _driver = sql::mariadb::get_driver_instance();
-        string connString = "jdbc:mariadb://" + _serverIP + ":" + _serverPort + "/" + _serverDatabase;
+ConnectDB::ConnectDB()
+    : serverPort("52167"),
+      serverIP("turntable.proxy.rlwy.net"),
+      serverDatabase("railway"),
+      serverUser("railway"),
+      serverPassword("_PCMaGJ_o90FKpBkSI4elWSWKDZzDnAJ")
+{
+    try
+    {
+        driver = sql::mariadb::get_driver_instance();
+        string connString = "jdbc:mariadb://" + serverIP + ":" + serverPort + "/" + serverDatabase;
         sql::SQLString url(connString);
         sql::Properties properties({
-            {"user", _serverUser},
-            {"password", _serverPassword}
+            {"user", serverUser},
+            {"password", serverPassword}
         });
         
-        _conn = _driver->connect(url, properties);
-    } catch (sql::SQLException& e) {
+        conn = driver->connect(url, properties);
+    }
+    catch (sql::SQLException& e)
+    {
         cerr << "Error connecting to MariaDB Platform: \n" << e.what() << endl;
         throw runtime_error("Error connecting to database");
     }
 }
 
-ConnectDB::~ConnectDB() {
-    if (_conn) {
-        _conn->close();
-        // O conector C++ gerencia a exclusão do objeto de conexão quando ele é fechado.
+ConnectDB::~ConnectDB()
+{
+    if (conn)
+    {
+        conn->close();
     }
 }
 
-sql::Connection* ConnectDB::getConnection() {
-    return _conn;
+sql::Connection* ConnectDB::getConnection()
+{
+    return conn;
 }

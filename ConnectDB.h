@@ -6,16 +6,18 @@
 
 using namespace std;
 
-class ConnectDB {
+// Manages the connection to the MariaDB database.
+class ConnectDB
+{
 private:
-	string _serverPort = "52167";
-	string _serverIP = "turntable.proxy.rlwy.net";
-	string _serverDatabase = "railway";
-	string _serverUser = "railway";
-	string _serverPassword = "_PCMaGJ_o90FKpBkSI4elWSWKDZzDnAJ";
+	const string serverPort;
+	const string serverIP;
+	const string serverDatabase;
+	const string serverUser;
+	const string serverPassword;
 
-	sql::Driver* _driver = nullptr;
-	sql::Connection* _conn = nullptr;
+	sql::Driver* driver = nullptr;
+	sql::Connection* conn = nullptr;
 
 public:
 	ConnectDB();

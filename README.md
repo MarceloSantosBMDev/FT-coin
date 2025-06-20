@@ -1,36 +1,36 @@
-# FT-Coin - Sistema de Controle de Carteiras
+# FT-Coin - Wallet Management System
 
-Este é um sistema de controle de carteiras de criptomoedas desenvolvido em C++.
+This is a coin wallet management system developed in C++.
 
-## Requisitos
+## Requirements
 
-- CMake 3.10 ou superior
-- Compilador C++ com suporte a C++17
+- CMake 3.10 or higher
+- C++ compiler with C++17 support
 - MariaDB Connector
 
-## Execução
+## Execution
 
-g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Carteira.cpp Movimentacao.cpp ConnectDB.cpp CarteiraMemDAO.cpp MovimentacaoMemDAO.cpp CarteiraBDDAO.cpp MovimentacaoBDDAO.cpp -I/usr/include/mariadb -lmariadbcpp -lmariadb -lpthread -ldl
+g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Wallet.cpp Transaction.cpp ConnectDB.cpp WalletMemDAO.cpp TransactionMemDAO.cpp WalletDBDAO.cpp TransactionDBDAO.cpp -I/usr/include/mariadb -lmariadbcpp -lmariadb -lpthread -ldl
 
-## Funcionalidades
+## Features
 
-- Gerenciamento de carteiras
-  - Criar nova carteira
-  - Editar carteira existente
-  - Excluir carteira
-  - Listar carteiras
+- Wallet Management
+  - Create new wallet
+  - Edit existing wallet
+  - Delete wallet
+  - List wallets
 
-- Movimentações
-  - Registrar compras
-  - Registrar vendas
+- Transactions
+  - Register purchases
+  - Register sales
 
-- Relatórios
-  - Carteiras por ID
-  - Carteiras por nome
-  - Saldo das carteiras
-  - Histórico de movimentações
-  - Ganhos e perdas
+- Reports
+  - Wallets by ID
+  - Wallets by holder name
+  - Wallet balances
+  - Transaction history
+  - Gains and losses
 
-## Licença
+## License
 
-Programa criado e produzido pelo grupo A-10, composto por Gustavo Soares Almeida, Hans William Hamann, Marcelo Dos Santos Da Boa Morte, Nicolas Lourenço Mafei e Renan Felipe Rodrigues
+Program created and produced by group A-10, composed of Gustavo Soares Almeida, Hans William Hamann, Marcelo Dos Santos Da Boa Morte, Nicolas Lourenço Mafei, and Renan Felipe Rodrigues.
