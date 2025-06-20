@@ -850,7 +850,7 @@ void Controller::showCredits()
     vector<string> info_text = {
         "\nFT COIN SYSTEM",
         "Version: 1.1.0",
-        "Release Date: July 2025"
+        "Release Date: June 2025"
     };
     printBlock(info_text);
     wait(1);
@@ -872,7 +872,7 @@ void Controller::showCredits()
     vector<string> uni_text = {
         "\nUNICAMP - University of Campinas",
         "Course: SI300 - Object-Oriented Programming I",
-        "2nd Semester of 2025"
+        "1st Semester of 2025"
     };
     printBlock(uni_text);
 
@@ -1011,37 +1011,54 @@ void Controller::generalQuoteReport()
         try
         {
             unique_ptr<sql::Statement> stmnt(dbConnection->getConnection()->createStatement());
-            sql::ResultSet* res = stmnt->executeQuery(
-                "SELECT "
-                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as MaxValue, "
-                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao DESC LIMIT 1) as MaxDate, "
-                "(SELECT Cotacao FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as MinValue, "
-                "(SELECT DATE_FORMAT(Data, '%d-%m-%Y') FROM ORACULO ORDER BY Cotacao ASC LIMIT 1) as MinDate, "
-                "AVG(Cotacao) as Average FROM ORACULO"
-            );
+            
+            double maxQuote = 0.0, minQuote = 0.0, avgQuote = 0.0;
+            string maxDate, minDate;
+            bool hasQuotes = false;
 
-            if (res->next())
-            {
+            // Query for MAX quote, read result, then close.
+            sql::ResultSet* resMax = stmnt->executeQuery("SELECT Cotacao, DATE_FORMAT(Data, '%d-%m-%Y') as FormattedDate FROM ORACULO ORDER BY Cotacao DESC LIMIT 1");
+            if (resMax->next()) {
+                maxQuote = resMax->getDouble("Cotacao");
+                maxDate = resMax->getString("FormattedDate");
+                hasQuotes = true;
+            }
+            delete resMax;
+
+            if (hasQuotes) {
+                // Query for MIN quote
+                sql::ResultSet* resMin = stmnt->executeQuery("SELECT Cotacao, DATE_FORMAT(Data, '%d-%m-%Y') as FormattedDate FROM ORACULO ORDER BY Cotacao ASC LIMIT 1");
+                if (resMin->next()) {
+                    minQuote = resMin->getDouble("Cotacao");
+                    minDate = resMin->getString("FormattedDate");
+                }
+                delete resMin;
+
+                // Query for AVG quote
+                sql::ResultSet* resAvg = stmnt->executeQuery("SELECT AVG(Cotacao) as Average FROM ORACULO");
+                if (resAvg->next()) {
+                    avgQuote = resAvg->getDouble("Average");
+                }
+                delete resAvg;
+
                 cout << CYAN << BOLD << "\n--- General Quote Report (DB) ---\n\n" << RESET;
                 stringstream ss;
 
-                ss << YELLOW << "Max Quote: " << RESET << GREEN << fixed << setprecision(2) << res->getDouble("MaxValue") << " (on " << res->getString("MaxDate") << ")" << RESET;
+                ss << YELLOW << "Max Quote: " << RESET << GREEN << fixed << setprecision(2) << maxQuote << " (on " << maxDate << ")" << RESET;
                 printSlowly(ss.str());
 
                 ss.str("");
-                ss << YELLOW << "Min Quote: " << RESET << RED << fixed << setprecision(2) << res->getDouble("MinValue") << " (on " << res->getString("MinDate") << ")" << RESET;
+                ss << YELLOW << "Min Quote: " << RESET << RED << fixed << setprecision(2) << minQuote << " (on " << minDate << ")" << RESET;
                 printSlowly(ss.str());
 
                 ss.str("");
-                ss << YELLOW << "Average Quote:  " << RESET << fixed << setprecision(2) << res->getDouble("Average");
+                ss << YELLOW << "Average Quote:  " << RESET << fixed << setprecision(2) << avgQuote;
                 printSlowly(ss.str());
             }
             else
             {
                  cout << YELLOW << "\nNo quotes registered in the oracle." << RESET << endl;
             }
-            delete res;
-
         }
         catch (sql::SQLException& e)
         {
@@ -1351,47 +1368,57 @@ double Controller::getQuote(const string& date)
 {
     if (type == DataBaseSelector::MEMORY)
     {
-        if (oracleMem.find(date) == oracleMem.end())
+        if (oracleMem.find(date) != oracleMem.end())
+        {
+            return oracleMem[date];
+        }
+        else
         {
             // Fallback: If no quote exists, create a random one.
-            cerr << YELLOW << "\nWarning (Memory): No quote found for date " << date << ". Creating a new one." << RESET << endl;
+            cout << YELLOW << "No previous quote found for the date. Generating a random one..." << RESET << endl;
             random_device rd;
             mt19937 gen(rd());
-            uniform_real_distribution<> distr(4.50, 5.90);
+            uniform_real_distribution<> distr(2.0, 7.0); // Range from 2.0 to 7.0
             double newQuote = distr(gen);
-            oracleMem[date] = newQuote;
+            oracleMem[date] = newQuote; // Save the new quote
             return newQuote;
         }
-        return oracleMem[date];
     }
     else
-    {
+    { // DATABASE
+        double quote = 0.0;
         try
         {
             unique_ptr<sql::PreparedStatement> pstmt(dbConnection->getConnection()->prepareStatement("SELECT Cotacao FROM ORACULO WHERE Data = ?"));
             pstmt->setString(1, date);
             sql::ResultSet* res = pstmt->executeQuery();
+
             if (res->next())
             {
-                double quote = res->getDouble("Cotacao");
-                delete res;
-                return quote;
+                quote = res->getDouble("Cotacao");
+            }
+            else
+            {
+                // Fallback: If no quote exists, create a random one.
+                cout << YELLOW << "No previous quote found for the date. Generating a random one..." << RESET << endl;
+                random_device rd;
+                mt19937 gen(rd());
+                uniform_real_distribution<> distr(2.0, 7.0); // Range from 2.0 to 7.0
+                quote = distr(gen);
+                createQuote(date, quote); // Save the new quote to DB
             }
             delete res;
-
-            // Fallback: If no quote exists, create a random one.
-            cerr << YELLOW << "\nWarning: No quote found for date " << date.substr(8, 2) + "-" + date.substr(5, 2) + "-" + date.substr(0, 4) << ". Creating a new one." << RESET << endl;
-            random_device rd;
-            mt19937 gen(rd());
-            uniform_real_distribution<> distr(4.50, 5.90);
-            double newQuote = distr(gen);
-            createQuote(date, newQuote);
-            return newQuote;
         }
         catch (sql::SQLException &e)
         {
-            cerr << "\nError fetching quote: " << e.what() << endl;
-            return 5.0;
+            cerr << RED << "Error getting current quote: " << e.what() << RESET << endl;
+            // Fallback in case of DB error
+            cout << YELLOW << "Database error. Generating a temporary random quote..." << RESET << endl;
+            random_device rd;
+            mt19937 gen(rd());
+            uniform_real_distribution<> distr(2.0, 7.0);
+            return distr(gen);
         }
+        return quote;
     }
 }
