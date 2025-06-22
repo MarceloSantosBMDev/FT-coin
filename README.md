@@ -34,11 +34,11 @@ g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Wallet.cpp Transa
 ## License
 
 Program created and produced by group A-10, composed of:
-  Gustavo Soares Almeida; 
-  Hans William Hamann;
-  Marcelo Dos Santos Da Boa Morte; 
-  Nicolas Lourenço Mafei;
-  Renan Felipe Rodrigues.
+  - Gustavo Soares Almeida; 
+  - Hans William Hamann;
+  - Marcelo Dos Santos Da Boa Morte; 
+  - Nicolas Lourenço Mafei;
+  - Renan Felipe Rodrigues.
 
-Developed in University of Campinas - UNICAMP, 1st semester of 2025
+Developed in University of Campinas - UNICAMP, 1st semester of 2025  
 © 2025 FT-Coin. All rights reserved.
