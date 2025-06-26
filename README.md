@@ -67,5 +67,5 @@ Program created and produced by group A-10, composed of:
 - Nicolas Lourenço Mafei;
 - Renan Felipe Rodrigues.
 
-Developed in University of Campinas - UNICAMP, 1st semester of 2025  Add commentMore actions
+Developed in University of Campinas - UNICAMP, 1st semester of 2025  Add commentMore actions  
 © 2025 FT-Coin. All rights reserved.
