@@ -166,7 +166,8 @@ void Controller::launchActions(string title, vector<string> menuItems, vector<vo
     while (true)
     {
         int option = menu.getOption();
-        if (option >= menuItems.size()) return;
+        if (option < 0 || static_cast<size_t>(option) >= menuItems.size()) return;
+
         
         // Calls the controller method corresponding to the user's menu choice.
         (this->*functions[option - 1])();
