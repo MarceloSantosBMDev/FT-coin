@@ -21,14 +21,17 @@ You can compile the program using one of the two options below:
 # Option 1 – Using Makefile
 
 Run the following command to build the executable:
+
 `make`
 
 To remove the generated executable:
+
 `make clean`
 
 # Option 2 – Using direct compilation command
 
 Run the following command on the bash terminal:
+
 `g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Wallet.cpp Transaction.cpp ConnectDB.cpp WalletMemDAO.cpp TransactionMemDAO.cpp WalletDBDAO.cpp TransactionDBDAO.cpp -I/usr/include/mariadb -lmariadbcpp -lmariadb -lpthread -ldl`
 
 ## Features
