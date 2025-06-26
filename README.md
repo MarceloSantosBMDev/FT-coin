@@ -34,6 +34,9 @@ Run the following command on the bash terminal:
 
 `g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Wallet.cpp Transaction.cpp ConnectDB.cpp WalletMemDAO.cpp TransactionMemDAO.cpp WalletDBDAO.cpp TransactionDBDAO.cpp -I/usr/include/mariadb -lmariadbcpp -lmariadb -lpthread -ldl`
 
+After running either option, on the terminal, execute the following line:
+
+`./FT-Coin.exe`
 ## Features
 
 ### Wallet Management
