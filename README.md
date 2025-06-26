@@ -12,8 +12,8 @@ This is a coin wallet management system developed in C++.
 
 On Debian/Ubuntu systems, you can install the required packages for MariaDB with the following command:
 
-bash
-sudo apt install g++ libmariadb-dev libmariadbcpp-dev
+bash  
+`sudo apt install g++ libmariadb-dev libmariadbcpp-dev`  
 
 ## Compilation Script
 You can compile the program using one of the two options below:
