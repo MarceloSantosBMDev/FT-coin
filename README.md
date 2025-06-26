@@ -18,7 +18,7 @@ sudo apt install g++ libmariadb-dev libmariadbcpp-dev
 ## Compilation Script
 You can compile the program using one of the two options below:
 
-# Option 1 – Using Makefile
+### Option 1 – Using Makefile
 
 Run the following command to build the executable:
 
@@ -28,7 +28,7 @@ To remove the generated executable:
 
 `make clean`
 
-# Option 2 – Using direct compilation command
+### Option 2 – Using direct compilation command
 
 Run the following command on the bash terminal:
 
@@ -36,19 +36,19 @@ Run the following command on the bash terminal:
 
 ## Features
 
-# Wallet Management
+### Wallet Management
 - Create new wallet
 - Edit existing wallet
 - Delete wallet
 - List wallets
 - Transactions
 
-# Coin transaction
+### Coin transaction
 - Register purchases
 - Register sales
 - Reports
 
-# Data Reports
+### Data Reports
 - Wallets global reports
 - Specific wallet report
 - Quote history
