@@ -114,13 +114,11 @@ void Controller::start()
 
 void Controller::walletActions()
 {
-    vector<string> menuItems = {
-        "New Wallet", "Edit Wallet", "Delete Wallet", "List Wallets", "Find by Holder", "Back"};
-
-    vector<void (Controller::*)()> functions = {
-        &Controller::newWallet, &Controller::editWallet, &Controller::deleteWallet, &Controller::listWallets, &Controller::findByHolder};
-
-    launchActions("Wallet Management", menuItems, functions);
+    launchActions(
+        "Wallet Actions",
+        {"New Wallet", "Edit Wallet", "Delete Wallet", "List Wallets", "Find by ID", "Back"},
+        {&Controller::newWallet, &Controller::editWallet, &Controller::deleteWallet, &Controller::listWallets, &Controller::findWalletById}
+    );
 }
 
 void Controller::transactionActions()
@@ -171,9 +169,15 @@ void Controller::launchActions(string title, vector<string> menuItems, vector<vo
     while (true)
     {
         int option = menu.getOption();
-        if (option < 0 || static_cast<size_t>(option) >= menuItems.size()) return;
+        // Check if the option is to go back (last item) or invalid.
+        if (option < 1 || static_cast<size_t>(option) > menuItems.size()) {
+             cout << RED << "Invalid option, please try again." << RESET << endl;
+             continue;
+        }
+        if (static_cast<size_t>(option) == menuItems.size()) {
+            return; // Last option is always "Back".
+        }
 
-        
         // Calls the controller method corresponding to the user's menu choice.
         (this->*functions[option - 1])();
     }
@@ -192,12 +196,14 @@ void Controller::newWallet()
 
 void Controller::editWallet()
 {
-    int id = getValidatedInput<int>("\nEnter the ID of the wallet you want to edit: ");
+    cout << "\n===== Edit Wallet =====" << endl;
+    int id = getValidatedInput<int>("Enter the ID of the wallet you want to edit: ");
 
     auto wallet = walletDAO->findById(id);
     if (!wallet)
     {
         cout << RED << "\nWallet not found!\n" << RESET;
+        interactiveWait(2);
         return;
     }
 
@@ -268,13 +274,31 @@ void Controller::deleteWallet()
 
 void Controller::listWallets()
 {
-    listAllWallets();
+    auto wallets = walletDAO->findAll();
+    if (wallets.empty()) {
+        cout << RED << "\nNo wallets found." << RESET << endl;
+        interactiveWait(3);
+        return;
+    }
+    cout << CYAN << BOLD << "\n--- Wallet List ---\n" << RESET;
+    cout << "--------------------------------------------------\n";
+    cout << left << setw(5) << "ID" << setw(25) << "Holder" << "Broker" << endl;
+    cout << "--------------------------------------------------\n";
+
+    stringstream ss;
+    for (const auto& wallet : wallets) {
+        ss.str(""); // Clear the stringstream
+        ss << left << setw(5) << wallet->getId() << setw(25) << wallet->getHolder() << wallet->getBroker();
+        printSlowly(ss.str(), 5);
+    }
+    cout << "--------------------------------------------------\n";
     interactiveWait(5);
 }
 
 void Controller::newPurchase()
 {
-    int walletId = getValidatedInput<int>("\nEnter the wallet ID for the purchase: ");
+    cout << "\n===== New Purchase =====" << endl;
+    int walletId = getValidatedInput<int>("Enter the wallet ID for the purchase: ");
     if (!walletDAO->findById(walletId)) {
         cout << RED << "\nWallet with ID " << walletId << " not found!\n" << RESET;
         interactiveWait(2);
@@ -330,7 +354,7 @@ void Controller::reportGlobalBalance()
         auto wallets = walletDAO->findAll();
         if (wallets.empty())
         {
-            cout << "\nNo wallets found.\n";
+            cout << RED << "\nNo wallets found." << RESET << endl;
             return;
         }
 
@@ -440,7 +464,7 @@ void Controller::reportHistory()
         auto transactions = transactionDAO->findAll();
         if (transactions.empty())
         {
-            cout << "\nNo transactions found.\n";
+            cout << RED << "\nNo transactions found." << RESET << endl;
             interactiveWait(3);
             return;
         }
@@ -481,7 +505,7 @@ void Controller::reportGainsAndLosses()
     auto wallets = walletDAO->findAll();
     if (wallets.empty())
     {
-        cout << "\nNo wallets found to calculate gains/losses.\n";
+        cout << RED << "\nNo wallets found to calculate gains/losses." << RESET << endl;
         interactiveWait(3);
         return;
     }
@@ -662,7 +686,7 @@ void Controller::reportWalletTransactionsAndCoins()
     cout << CYAN << "\n--- Purchase Transactions ---\n" << RESET;
     if (purchases.empty())
     {
-        cout << YELLOW << "No purchase operations registered." << RESET << endl;
+        cout << RED << "No purchase operations registered." << RESET << endl;
     }
     else
     {
@@ -672,7 +696,7 @@ void Controller::reportWalletTransactionsAndCoins()
     cout << CYAN << "\n--- Sale Transactions ---\n" << RESET;
     if (sales.empty())
     {
-        cout << YELLOW << "No sale operations registered." << RESET << endl;
+        cout << RED << "No sale operations registered." << RESET << endl;
     }
     else
     {
@@ -773,7 +797,7 @@ void Controller::reportWallet()
 
     if (transactions.empty())
     {
-        cout << YELLOW << "\nNo transactions registered for this wallet." << RESET << endl;
+        cout << RED << "\nNo transactions registered for this wallet." << RESET << endl;
     }
     else
     {
@@ -977,7 +1001,7 @@ void Controller::listQuotesHistory()
     { // MEMORY
         if (oracleMem.empty())
         {
-            cout << YELLOW << "\nNo quotes registered in the oracle." << RESET << endl;
+            cout << RED << "\nNo quotes registered in the oracle." << RESET << endl;
             interactiveWait(3);
             return;
         }
@@ -1061,7 +1085,7 @@ void Controller::generalQuoteReport()
             }
             else
             {
-                 cout << YELLOW << "\nNo quotes registered in the oracle." << RESET << endl;
+                 cout << RED << "\nNo quotes registered in the oracle." << RESET << endl;
             }
         }
         catch (sql::SQLException& e)
@@ -1074,7 +1098,7 @@ void Controller::generalQuoteReport()
     { // MEMORY
         if (oracleMem.empty())
         {
-            cout << YELLOW << "\nNo quotes registered in the oracle." << RESET << endl;
+            cout << RED << "\nNo quotes registered in the oracle." << RESET << endl;
             interactiveWait(3);
             return;
         }
@@ -1145,7 +1169,7 @@ void Controller::printTransactions(const vector<unique_ptr<Transaction>>& transa
 
     if (transactions.empty())
     {
-        cout << "No transactions found.\n";
+        cout << RED << "No transactions found." << RESET << endl;
     }
     else
     {
@@ -1245,44 +1269,24 @@ string Controller::getValidatedDate(const string& prompt)
     }
 }
 
-void Controller::listAllWallets()
+void Controller::findWalletById()
 {
-    auto wallets = walletDAO->findAll();
-    if (wallets.empty())
-    {
-        cout << "\nNo wallets found.\n";
-        return;
-    }
-    cout << "\n--- Wallet List ---\n";
-    cout << "--------------------------------------------------\n";
-    cout << left << setw(5) << "ID" << setw(25) << "Holder" << "Broker" << endl;
-    cout << "--------------------------------------------------\n";
-    
-    stringstream ss;
-    for (const auto& wallet : wallets)
-    {
-        ss.str("");
-        ss << left << setw(5) << wallet->getId() << setw(25) << wallet->getHolder() << wallet->getBroker();
-        printSlowly(ss.str(), 5);
-    }
-    cout << "--------------------------------------------------\n";
-}
+    cout << "\n===== Find Wallet by ID =====" << endl;
+    int id = getValidatedInput<int>("Enter wallet ID: ");
 
-void Controller::findByHolder()
-{
-    string name = getValidatedInput<string>("Enter the holder name to search for: ");
+    unique_ptr<Wallet> wallet = walletDAO->findById(id);
 
-    auto wallet = walletDAO->findByHolder(name);
-    if (wallet)
-    {
-        cout << "\nWallet found:\n";
-        cout << "ID: " << wallet->getId() << ", Holder: " << wallet->getHolder() << ", Broker: " << wallet->getBroker() << endl;
+    if (wallet) {
+        cout << GREEN << "\nWallet found!" << RESET << endl;
+        cout << "----------------------------------------" << endl;
+        cout << YELLOW << "ID: " << RESET << wallet->getId() << endl;
+        cout << YELLOW << "Holder: " << RESET << wallet->getHolder() << endl;
+        cout << YELLOW << "Broker: " << RESET << wallet->getBroker() << endl;
+        cout << "----------------------------------------" << endl;
+    } else {
+        cout << RED << "\nWallet with ID " << id << " not found." << RESET << endl;
     }
-    else
-    {
-        cout << RED << "\nWallet not found.\n" << RESET;
-    }
-    interactiveWait(3);
+    interactiveWait(5);
 }
 
 double Controller::getWalletCoinQuantity(int walletId)

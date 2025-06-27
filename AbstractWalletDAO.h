@@ -34,7 +34,7 @@ public:
      * @brief Updates an existing wallet in the data source.
      * @param wallet The Wallet object to update.
      */
-    virtual void update(Wallet& wallet) = 0;
+    virtual void update(const Wallet& wallet) = 0;
 
     /**
      * @brief Removes a wallet from the data source by its ID.
@@ -54,13 +54,6 @@ public:
      * @return A vector of unique_ptrs to all Wallet objects.
      */
     virtual vector<unique_ptr<Wallet>> findAll() = 0;
-
-    /**
-     * @brief Finds a wallet by its holder's name.
-     * @param holderName The name of the wallet holder.
-     * @return A unique_ptr to the Wallet if found, otherwise nullptr.
-     */
-    virtual unique_ptr<Wallet> findByHolder(const string& holderName) = 0;
 };
 
 #endif // ABSTRACT_WALLET_DAO_H 

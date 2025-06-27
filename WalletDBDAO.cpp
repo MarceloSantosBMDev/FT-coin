@@ -1,4 +1,5 @@
 #include "WalletDBDAO.h"
+#include <iostream>
 #include <stdexcept>
 #include <mariadb/conncpp.hpp>
 
@@ -30,7 +31,7 @@ void WalletDBDAO::insert(Wallet& wallet)
     }
 }
 
-void WalletDBDAO::update(Wallet& wallet)
+void WalletDBDAO::update(const Wallet& wallet)
 {
     try
     {
@@ -95,31 +96,8 @@ vector<unique_ptr<Wallet>> WalletDBDAO::findAll()
         }
         delete res;
     }
-    catch (sql::SQLException& e)
-    {
-        throw runtime_error("Error finding all wallets: " + string(e.what()));
+    catch (const sql::SQLException& e) {
+        cerr << "SQL Error in findAll: " << e.what() << endl;
     }
     return wallets;
-}
-
-unique_ptr<Wallet> WalletDBDAO::findByHolder(const string& holderName)
-{
-    try
-    {
-        unique_ptr<sql::PreparedStatement> stmnt(connection->getConnection()->prepareStatement("SELECT * FROM CARTEIRA WHERE Titular = ?"));
-        stmnt->setString(1, holderName);
-        sql::ResultSet* res = stmnt->executeQuery();
-        if (res->next())
-        {
-            auto wallet = rowToWallet(res);
-            delete res;
-            return wallet;
-        }
-        delete res;
-    }
-    catch (sql::SQLException& e)
-    {
-        throw runtime_error("Error finding wallet by holder: " + string(e.what()));
-    }
-    return nullptr;
 } 

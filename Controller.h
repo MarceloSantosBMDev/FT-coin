@@ -72,8 +72,7 @@ private:
 	void newWallet();
 	void editWallet();
 	void listWallets();
-	void findByHolder();
-	void listAllWallets();
+	void findWalletById();
 
 	// Transaction Operations
 	void newPurchase();

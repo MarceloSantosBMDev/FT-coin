@@ -11,7 +11,7 @@ void WalletMemDAO::insert(Wallet& wallet)
     wallets.push_back(unique_ptr<Wallet>(new Wallet(wallet)));
 }
 
-void WalletMemDAO::update(Wallet& wallet)
+void WalletMemDAO::update(const Wallet& wallet)
 {
     for (auto& w : wallets)
     {
@@ -50,22 +50,7 @@ vector<unique_ptr<Wallet>> WalletMemDAO::findAll()
     vector<unique_ptr<Wallet>> result;
     for (const auto& w : wallets)
     {
-        if (w)
-        {
-            result.push_back(unique_ptr<Wallet>(new Wallet(*w)));
-        }
+        result.push_back(unique_ptr<Wallet>(new Wallet(*w)));
     }
     return result;
-}
-
-unique_ptr<Wallet> WalletMemDAO::findByHolder(const string& holderName)
-{
-    for (const auto& w : wallets)
-    {
-        if (w && w->getHolder() == holderName)
-        {
-            return unique_ptr<Wallet>(new Wallet(*w));
-        }
-    }
-    return nullptr;
 } 
