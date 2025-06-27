@@ -1,10 +1,11 @@
 # FT-Coin - Wallet Management System
 
 This is a coin wallet management system developed in C++.
+Version 1.2.0
 
 ## Requirements
 
-- C++ compiler with C++17 support (e.g., g++)
+- C++ compiler with C++11 support (e.g., g++)
 - MariaDB Connector/C and Connector/C++ installed on Linux
 - Development libraries for:
   - mariadbcpp (`<mariadb/conncpp.hpp>`)
@@ -32,7 +33,7 @@ To remove the generated executable:
 
 Run the following command on the bash terminal:
 
-`g++ -std=c++17 -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Wallet.cpp Transaction.cpp ConnectDB.cpp WalletMemDAO.cpp TransactionMemDAO.cpp WalletDBDAO.cpp TransactionDBDAO.cpp -I/usr/include/mariadb -lmariadbcpp -lmariadb -lpthread -ldl`
+`g++ -std=c++11 -Wall -Wextra -pedantic -o FT-Coin.exe Main.cpp Menu.cpp Controller.cpp Wallet.cpp Transaction.cpp ConnectDB.cpp WalletMemDAO.cpp TransactionMemDAO.cpp WalletDBDAO.cpp TransactionDBDAO.cpp -I/usr/include/mariadb -lmariadbcpp -lmariadb -lpthread -ldl`  
 
 After doing either option for compiling the program, on the terminal, execute the following line:
 
@@ -67,5 +68,5 @@ Program created and produced by group A-10, composed of:
 - Nicolas Lourenço Mafei;
 - Renan Felipe Rodrigues.
 
-Developed in University of Campinas - UNICAMP, 1st semester of 2025  Add commentMore actions  
+Developed in University of Campinas - UNICAMP, 1st semester of 2025  
 © 2025 FT-Coin. All rights reserved.

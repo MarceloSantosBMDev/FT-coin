@@ -6,10 +6,14 @@
 #include "DataBaseSelector.h"
 #include "ConnectDB.h"
 #include "Transaction.h"
+#include "Colors.h"
 #include <string>
 #include <vector>
 #include <memory>
 #include <map>
+#include <iostream>
+#include <limits>
+#include <algorithm>
 
 using namespace std;
 
@@ -50,6 +54,10 @@ public:
 	 */
 	void start();
 
+	void listWallet();
+	void deleteWallet();
+	void findWallet();
+
 private:
 	// Menu Action Handlers
 	void walletActions();
@@ -63,7 +71,6 @@ private:
 	// Wallet Operations
 	void newWallet();
 	void editWallet();
-	void deleteWallet();
 	void listWallets();
 	void findByHolder();
 	void listAllWallets();
@@ -71,6 +78,7 @@ private:
 	// Transaction Operations
 	void newPurchase();
 	void newSale();
+	void listTransactionsByWallet();
 
 	// Report Generation
 	void reportGlobalBalance();
@@ -94,10 +102,8 @@ private:
 	void createQuote(const string& date, double quote);
 	void printTransactions(const vector<unique_ptr<Transaction>>& transactions);
 	void printSlowly(const string& text, int delay_ms = 30);
-	bool isValidDate(int d, int m, int y);
-	template<typename T>
-	T getValidatedInput(const string& prompt);
 	string getValidatedDate(const string& prompt);
+	bool isValidDate(int d, int m, int y);
 
 	// Member variables
 	unique_ptr<ConnectDB> dbConnection;
@@ -105,6 +111,56 @@ private:
 	unique_ptr<AbstractTransactionDAO> transactionDAO;
 	DataBaseSelector type;
 	map<string, double> oracleMem; // In-memory storage for quotes
+
+	void clearScreen();
+
+	template <typename T>
+	T getValidatedInput(const string& prompt);
 };
+
+// Template definitions
+template <typename T>
+T Controller::getValidatedInput(const string& prompt) {
+	T value;
+	while (true) {
+		cout << prompt;
+		cin >> value;
+		if (cin.good()) {
+			char c = cin.peek();
+			if (c == '\n' || c == EOF) {
+				cin.ignore(numeric_limits<streamsize>::max(), '\n');
+				break;
+			}
+		}
+		cout << endl << RED << "Invalid input. Please try again." << RESET << endl;
+		cin.clear();
+		cin.ignore(numeric_limits<streamsize>::max(), '\n');
+	}
+	return value;
+}
+
+// Template specialization for std::string
+template <>
+inline string Controller::getValidatedInput<string>(const string& prompt) {
+	string value;
+	while (true) {
+		cout << prompt;
+		getline(cin >> ws, value);
+
+		size_t first = value.find_first_not_of(" \t\n\r\f\v");
+		if (string::npos == first) {
+			value.clear();
+		} else {
+			size_t last = value.find_last_not_of(" \t\n\r\f\v");
+			value = value.substr(first, (last - first + 1));
+		}
+
+		if (!value.empty()) {
+			break;
+		}
+		cout << endl << RED << "Invalid input. Please try again." << RESET << endl;
+	}
+	return value;
+}
 
 #endif // CONTROLLER_H

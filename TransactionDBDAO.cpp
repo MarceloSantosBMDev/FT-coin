@@ -8,13 +8,13 @@ TransactionDBDAO::TransactionDBDAO(ConnectDB* conn) : connection(conn) {}
 
 unique_ptr<Transaction> TransactionDBDAO::rowToTransaction(sql::ResultSet* res)
 {
-    return make_unique<Transaction>(
+    return unique_ptr<Transaction>(new Transaction(
         res->getInt("IdMovimento"), 
         res->getInt("IdCarteira"), 
         string(res->getString("TipoOperacao")), 
         res->getDouble("Quantidade"), 
         string(res->getString("Data"))
-    );
+    ));
 }
 
 void TransactionDBDAO::insert(Transaction& transaction)

@@ -8,11 +8,11 @@ WalletDBDAO::WalletDBDAO(ConnectDB* conn) : connection(conn) {}
 
 unique_ptr<Wallet> WalletDBDAO::rowToWallet(sql::ResultSet* res)
 {
-    return make_unique<Wallet>(
+    return unique_ptr<Wallet>(new Wallet(
         res->getInt("IdCarteira"), 
         string(res->getString("Titular")), 
         string(res->getString("Corretora"))
-    );
+    ));
 }
 
 void WalletDBDAO::insert(Wallet& wallet)

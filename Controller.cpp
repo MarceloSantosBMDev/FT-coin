@@ -40,14 +40,19 @@ Controller::Controller(DataBaseSelector dbType)
     type = dbType;
     if (dbType == DataBaseSelector::MEMORY)
     {
-        walletDAO = make_unique<WalletMemDAO>();
-        transactionDAO = make_unique<TransactionMemDAO>();
+        walletDAO = unique_ptr<WalletMemDAO>(new WalletMemDAO());
+        transactionDAO = unique_ptr<TransactionMemDAO>(new TransactionMemDAO());
     }
     else
     {
-        dbConnection = make_unique<ConnectDB>();
-        walletDAO = make_unique<WalletDBDAO>(dbConnection.get());
-        transactionDAO = make_unique<TransactionDBDAO>(dbConnection.get());
+        try {
+            dbConnection = unique_ptr<ConnectDB>(new ConnectDB());
+            walletDAO = unique_ptr<WalletDBDAO>(new WalletDBDAO(dbConnection.get()));
+            transactionDAO = unique_ptr<TransactionDBDAO>(new TransactionDBDAO(dbConnection.get()));
+        } catch (const exception& e) {
+            cerr << "Erro ao conectar ao banco de dados: " << e.what() << endl;
+            exit(1);
+        }
     }
 }
 
@@ -71,7 +76,7 @@ void Controller::start()
     printSlowly(string(CYAN) + "\nCoin Wallet Gains and Losses Calculation System" + RESET, 15);
 
     string mode = (type == DataBaseSelector::MEMORY) ? "Memory" : "Database";
-    printSlowly(string(CYAN) + BOLD + mode + " Version 1.1.0" + RESET, 15);
+    printSlowly(string(CYAN) + BOLD + mode + " Version 1.2.0" + RESET, 15);
 
     cout << endl;
 
@@ -644,13 +649,13 @@ void Controller::reportWalletTransactionsAndCoins()
         {
             totalCoinsPurchased += mov->getQuantity();
             purchaseOpsCount++;
-            purchases.push_back(make_unique<Transaction>(*mov));
+            purchases.push_back(unique_ptr<Transaction>(new Transaction(*mov)));
         }
         else
         { 
             totalCoinsSold += mov->getQuantity();
             saleOpsCount++;
-            sales.push_back(make_unique<Transaction>(*mov));
+            sales.push_back(unique_ptr<Transaction>(new Transaction(*mov)));
         }
     }
 
@@ -850,7 +855,7 @@ void Controller::showCredits()
 
     vector<string> info_text = {
         "\nFT COIN SYSTEM",
-        "Version: 1.1.0",
+        "Version: 1.2.0",
         "Release Date: June 2025"
     };
     printBlock(info_text);
@@ -919,10 +924,8 @@ void Controller::interactiveWait(int seconds)
     cout << "\r                                                     \r" << flush; 
 }
 
-void Controller::printSlowly(const string& text, int delay_ms)
-{
-    for (const char c : text)
-    {
+void Controller::printSlowly(const string& text, int delay_ms) {
+    for (char c : text) {
         cout << c << flush;
         this_thread::sleep_for(chrono::milliseconds(delay_ms));
     }
@@ -1173,28 +1176,12 @@ void Controller::printTransactions(const vector<unique_ptr<Transaction>>& transa
     cout << "----------------------------------------------------------------------------------\n";
 }
 
-template<typename T>
-T Controller::getValidatedInput(const string& prompt)
-{
-    T value;
-    cout << prompt;
-    
-    // Special handling for string to allow reading inputs with spaces.
-    if constexpr (is_same_v<T, string>)
-    {
-        getline(cin >> ws, value);
-        return value;
-    }
-
-    while (!(cin >> value))
-    {
-        cout << RED << "\nInvalid input. Please enter a numeric value." << RESET << endl;
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        cout << prompt;
-    }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-    return value;
+void Controller::clearScreen() {
+    #ifdef _WIN32
+        system("cls");
+    #else
+        system("clear");
+    #endif
 }
 
 bool Controller::isValidDate(int d, int m, int y)
@@ -1257,10 +1244,6 @@ string Controller::getValidatedDate(const string& prompt)
         }
     }
 }
-
-template int Controller::getValidatedInput<int>(const string& prompt);
-template double Controller::getValidatedInput<double>(const string& prompt);
-template string Controller::getValidatedInput<string>(const string& prompt);
 
 void Controller::listAllWallets()
 {

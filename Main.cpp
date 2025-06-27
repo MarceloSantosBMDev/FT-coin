@@ -23,8 +23,14 @@ void chooseDatabase(unique_ptr<Controller>& controller) {
     }
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
-    DataBaseSelector dbType = (option == 1) ? DataBaseSelector::MEMORY : DataBaseSelector::DATABASE;
-    controller = make_unique<Controller>(dbType);
+    DataBaseSelector dbType;
+    if (option == 2) {
+        dbType = DataBaseSelector::DATABASE;
+    } else {
+        dbType = DataBaseSelector::MEMORY;
+    }
+
+    controller = unique_ptr<Controller>(new Controller(dbType));
 }
 
 int main() {

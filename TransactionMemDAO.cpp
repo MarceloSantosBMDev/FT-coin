@@ -7,8 +7,8 @@ TransactionMemDAO::TransactionMemDAO() : nextId(1) {}
 
 void TransactionMemDAO::insert(Transaction& transaction)
 {
-    transaction.setId(nextId++);
-    transactions.push_back(make_unique<Transaction>(transaction));
+    transaction.setId(transactions.size() + 1);
+    transactions.push_back(unique_ptr<Transaction>(new Transaction(transaction)));
 }
 
 void TransactionMemDAO::update(Transaction& transaction)
@@ -49,7 +49,7 @@ unique_ptr<Transaction> TransactionMemDAO::findById(int id)
     {
         if (trans && trans->getId() == id)
         {
-            return make_unique<Transaction>(*trans);
+            return unique_ptr<Transaction>(new Transaction(*trans));
         }
     }
     return nullptr;
@@ -62,7 +62,7 @@ vector<unique_ptr<Transaction>> TransactionMemDAO::findByWalletId(int walletId)
     {
         if (trans && trans->getWalletId() == walletId)
         {
-            result.push_back(make_unique<Transaction>(*trans));
+            result.push_back(unique_ptr<Transaction>(new Transaction(*trans)));
         }
     }
     return result;
@@ -75,7 +75,7 @@ vector<unique_ptr<Transaction>> TransactionMemDAO::findAll()
     {
         if (trans)
         {
-            result.push_back(make_unique<Transaction>(*trans));
+            result.push_back(unique_ptr<Transaction>(new Transaction(*trans)));
         }
     }
     return result;

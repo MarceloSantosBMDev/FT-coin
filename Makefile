@@ -3,7 +3,7 @@ TARGET = FT-Coin.exe
 
 # Compilador e flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall
+CXXFLAGS = -std=c++11 -Wall -Wextra -pedantic
 
 # Diretórios de include
 INCLUDES = -I/usr/include/mariadb

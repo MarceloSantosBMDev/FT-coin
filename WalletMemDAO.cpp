@@ -7,8 +7,8 @@ WalletMemDAO::WalletMemDAO() : nextId(1) {}
 
 void WalletMemDAO::insert(Wallet& wallet)
 {
-    wallet.setId(nextId++);
-    wallets.push_back(make_unique<Wallet>(wallet));
+    wallet.setId(wallets.size() + 1);
+    wallets.push_back(unique_ptr<Wallet>(new Wallet(wallet)));
 }
 
 void WalletMemDAO::update(Wallet& wallet)
@@ -39,7 +39,7 @@ unique_ptr<Wallet> WalletMemDAO::findById(int id)
     {
         if (w && w->getId() == id)
         {
-            return make_unique<Wallet>(*w);
+            return unique_ptr<Wallet>(new Wallet(*w));
         }
     }
     return nullptr;
@@ -52,7 +52,7 @@ vector<unique_ptr<Wallet>> WalletMemDAO::findAll()
     {
         if (w)
         {
-            result.push_back(make_unique<Wallet>(*w));
+            result.push_back(unique_ptr<Wallet>(new Wallet(*w)));
         }
     }
     return result;
@@ -64,7 +64,7 @@ unique_ptr<Wallet> WalletMemDAO::findByHolder(const string& holderName)
     {
         if (w && w->getHolder() == holderName)
         {
-            return make_unique<Wallet>(*w);
+            return unique_ptr<Wallet>(new Wallet(*w));
         }
     }
     return nullptr;
