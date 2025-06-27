@@ -906,7 +906,7 @@ void Controller::interactiveWait(int seconds)
         
         this_thread::sleep_for(chrono::seconds(1));
 
-        char ch = getchar();
+        int ch = getchar();
         if (ch == '\n')
         {
             break;
@@ -1020,7 +1020,7 @@ void Controller::generalQuoteReport()
             // Query for MAX quote, read result, then close.
             sql::ResultSet* resMax = stmnt->executeQuery("SELECT Cotacao, DATE_FORMAT(Data, '%d-%m-%Y') as FormattedDate FROM ORACULO ORDER BY Cotacao DESC LIMIT 1");
             if (resMax->next()) {
-                maxQuote = resMax->getDouble("Cotacao");
+                maxQuote = static_cast<double>(resMax->getDouble("Cotacao"));
                 maxDate = resMax->getString("FormattedDate");
                 hasQuotes = true;
             }
@@ -1030,7 +1030,7 @@ void Controller::generalQuoteReport()
                 // Query for MIN quote
                 sql::ResultSet* resMin = stmnt->executeQuery("SELECT Cotacao, DATE_FORMAT(Data, '%d-%m-%Y') as FormattedDate FROM ORACULO ORDER BY Cotacao ASC LIMIT 1");
                 if (resMin->next()) {
-                    minQuote = resMin->getDouble("Cotacao");
+                    minQuote = static_cast<double>(resMin->getDouble("Cotacao"));
                     minDate = resMin->getString("FormattedDate");
                 }
                 delete resMin;
@@ -1038,7 +1038,7 @@ void Controller::generalQuoteReport()
                 // Query for AVG quote
                 sql::ResultSet* resAvg = stmnt->executeQuery("SELECT AVG(Cotacao) as Average FROM ORACULO");
                 if (resAvg->next()) {
-                    avgQuote = resAvg->getDouble("Average");
+                    avgQuote = static_cast<double>(resAvg->getDouble("Average"));
                 }
                 delete resAvg;
 
@@ -1097,7 +1097,7 @@ void Controller::generalQuoteReport()
             sum += pair.second;
         }
 
-        double average = sum / oracleMem.size();
+        double average = sum / static_cast<double>(oracleMem.size());
 
         string maxDate_display = maxDate.substr(8, 2) + "-" + maxDate.substr(5, 2) + "-" + maxDate.substr(0, 4);
         string minDate_display = minDate.substr(8, 2) + "-" + minDate.substr(5, 2) + "-" + minDate.substr(0, 4);
@@ -1396,7 +1396,7 @@ double Controller::getQuote(const string& date)
 
             if (res->next())
             {
-                quote = res->getDouble("Cotacao");
+                quote = static_cast<double>(res->getDouble("Cotacao"));
             }
             else
             {
